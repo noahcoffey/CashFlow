@@ -4,6 +4,8 @@
 
 A local-first personal finance app built with Next.js and SQLite. All your data stays on your machine — no cloud accounts, no subscriptions, no third-party access to your financial data.
 
+![CashFlow Dashboard](docs/screenshot-dashboard.png)
+
 ## Features
 
 ### Core
