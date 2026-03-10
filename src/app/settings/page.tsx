@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { formatDate } from "@/lib/utils"
-import { Plus, Trash2, Edit2, Building2, Tag, RefreshCw } from "lucide-react"
+import { Plus, Trash2, Edit2, Building2, Tag, RefreshCw, Tags } from "lucide-react"
 import { toast } from "sonner"
 
 interface Account {
@@ -25,6 +25,10 @@ interface Category {
   id: string; name: string; icon: string;
 }
 
+interface TagItem {
+  id: string; name: string; color: string; usage_count: number;
+}
+
 export default function SettingsPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [aliases, setAliases] = useState<Alias[]>([])
@@ -36,11 +40,15 @@ export default function SettingsPage() {
   const [aliasForm, setAliasForm] = useState({ raw_pattern: "", display_name: "", category_id: "" })
   const [applyRetroactively, setApplyRetroactively] = useState(true)
   const [reapplying, setReapplying] = useState(false)
+  const [tagsList, setTagsList] = useState<TagItem[]>([])
+  const [showTagDialog, setShowTagDialog] = useState(false)
+  const [tagForm, setTagForm] = useState({ id: "", name: "", color: "#6B7280" })
 
   const fetchData = () => {
     fetch("/api/accounts").then(r => r.json()).then(d => setAccounts(d.accounts || []))
     fetch("/api/aliases").then(r => r.json()).then(d => setAliases(d.aliases || []))
     fetch("/api/categories").then(r => r.json()).then(d => setCategories(d.categories || []))
+    fetch("/api/tags").then(r => r.json()).then(d => setTagsList(d.tags || []))
   }
 
   useEffect(() => { fetchData() }, [])
@@ -122,11 +130,35 @@ export default function SettingsPage() {
     toast.success("Alias deleted")
   }
 
+  const saveTag = async () => {
+    if (!tagForm.name.trim()) return
+    const method = tagForm.id ? "PUT" : "POST"
+    await fetch("/api/tags", {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(tagForm),
+    })
+    setShowTagDialog(false)
+    setTagForm({ id: "", name: "", color: "#6B7280" })
+    fetchData()
+    toast.success("Tag saved")
+  }
+
+  const deleteTag = async (id: string) => {
+    await fetch("/api/tags", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    })
+    fetchData()
+    toast.success("Tag deleted")
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-zinc-500 text-sm">Manage accounts and merchant aliases</p>
+        <p className="text-zinc-500 text-sm">Manage accounts, aliases, and tags</p>
       </div>
 
       {/* Accounts */}
@@ -212,6 +244,52 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Tags */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2"><Tags className="h-5 w-5" /> Tags</CardTitle>
+            <CardDescription>Flexible labels for transactions</CardDescription>
+          </div>
+          <Button onClick={() => { setTagForm({ id: "", name: "", color: "#6B7280" }); setShowTagDialog(true) }} size="sm">
+            <Plus className="h-4 w-4 mr-1" /> Add Tag
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {tagsList.length === 0 ? (
+            <div className="py-8 text-center text-zinc-500">
+              <p>No tags yet. Create tags to label transactions.</p>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {tagsList.map(tag => (
+                <div key={tag.id} className="flex items-center gap-1.5 py-1.5 px-3 rounded-full border border-zinc-700 group hover:border-zinc-600">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: tag.color }} />
+                  <span className="text-sm text-zinc-200">{tag.name}</span>
+                  <span className="text-xs text-zinc-600">{tag.usage_count}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => { setTagForm({ id: tag.id, name: tag.name, color: tag.color }); setShowTagDialog(true) }}
+                  >
+                    <Edit2 className="h-2.5 w-2.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => deleteTag(tag.id)}
+                  >
+                    <Trash2 className="h-2.5 w-2.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Account Dialog */}
       <Dialog open={showAccountDialog} onOpenChange={setShowAccountDialog}>
         <DialogContent>
@@ -289,6 +367,29 @@ export default function SettingsPage() {
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setShowAliasDialog(false)}>Cancel</Button>
               <Button onClick={saveAlias}>{editingAliasId ? "Save" : "Create"} Alias</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Tag Dialog */}
+      <Dialog open={showTagDialog} onOpenChange={setShowTagDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{tagForm.id ? "Edit" : "New"} Tag</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm text-zinc-400 mb-1 block">Name *</label>
+              <Input value={tagForm.name} onChange={e => setTagForm({ ...tagForm, name: e.target.value })} placeholder="e.g. tax-deductible" />
+            </div>
+            <div>
+              <label className="text-sm text-zinc-400 mb-1 block">Color</label>
+              <Input type="color" value={tagForm.color} onChange={e => setTagForm({ ...tagForm, color: e.target.value })} className="h-10 w-20 p-1" />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowTagDialog(false)}>Cancel</Button>
+              <Button onClick={saveTag} disabled={!tagForm.name.trim()}>Save</Button>
             </div>
           </div>
         </DialogContent>

@@ -13,6 +13,13 @@ import { formatCurrency, formatDate } from "@/lib/utils"
 import { Search, Filter, ChevronLeft, ChevronRight, Save, X, Tags, Trash2, Bookmark, Download, Copy } from "lucide-react"
 import { toast } from "sonner"
 
+interface Tag {
+  id: string
+  name: string
+  color: string
+  usage_count?: number
+}
+
 interface Transaction {
   id: string
   account_id: string
@@ -27,6 +34,7 @@ interface Transaction {
   account_name: string
   is_reconciled: number
   notes: string
+  tags: Tag[]
 }
 
 interface Category {
@@ -74,6 +82,11 @@ export default function TransactionsPage() {
     }>
   }>>([])
   const [duplicatesLoading, setDuplicatesLoading] = useState(false)
+  const [tags, setTags] = useState<Tag[]>([])
+  const [tagFilter, setTagFilter] = useState("")
+  const [showTagDialog, setShowTagDialog] = useState(false)
+  const [newTagName, setNewTagName] = useState("")
+  const [newTagColor, setNewTagColor] = useState("#6B7280")
 
   const limit = 25
 
@@ -85,6 +98,7 @@ export default function TransactionsPage() {
     if (categoryFilter) params.set("categoryId", categoryFilter)
     if (dateFrom) params.set("startDate", dateFrom)
     if (dateTo) params.set("endDate", dateTo)
+    if (tagFilter) params.set("tagId", tagFilter)
 
     fetch(`/api/transactions?${params}`)
       .then((r) => r.json())
@@ -93,7 +107,7 @@ export default function TransactionsPage() {
         setTotal(data.total || 0)
       })
       .finally(() => setLoading(false))
-  }, [page, search, accountFilter, categoryFilter, dateFrom, dateTo])
+  }, [page, search, accountFilter, categoryFilter, dateFrom, dateTo, tagFilter])
 
   useEffect(() => {
     fetchTransactions()
@@ -102,6 +116,7 @@ export default function TransactionsPage() {
   useEffect(() => {
     fetch("/api/categories").then((r) => r.json()).then((d) => setCategories(d.categories || []))
     fetch("/api/accounts").then((r) => r.json()).then((d) => setAccounts(d.accounts || []))
+    fetch("/api/tags").then((r) => r.json()).then((d) => setTags(d.tags || []))
   }, [])
 
   const totalPages = Math.ceil(total / limit)
@@ -247,6 +262,51 @@ export default function TransactionsPage() {
     toast.success("Duplicate removed")
   }
 
+  const createTag = async () => {
+    if (!newTagName.trim()) return
+    const res = await fetch("/api/tags", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newTagName.trim(), color: newTagColor }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setTags(prev => [...prev, { ...data.tag, usage_count: 0 }])
+      setNewTagName("")
+      setNewTagColor("#6B7280")
+      setShowTagDialog(false)
+      toast.success("Tag created")
+    } else {
+      const data = await res.json()
+      toast.error(data.error || "Failed to create tag")
+    }
+  }
+
+  const bulkTag = async (tagId: string) => {
+    if (selected.size === 0) return
+    await fetch("/api/transactions/tags", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transaction_ids: Array.from(selected), tag_id: tagId }),
+    })
+    setSelected(new Set())
+    fetchTransactions()
+    toast.success(`Tagged ${selected.size} transactions`)
+  }
+
+  const toggleTag = async (txnId: string, tagId: string, hasTag: boolean) => {
+    await fetch("/api/transactions/tags", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        transaction_ids: [txnId],
+        tag_id: tagId,
+        action: hasTag ? "remove" : "add",
+      }),
+    })
+    fetchTransactions()
+  }
+
   const exportCSV = () => {
     const params = new URLSearchParams()
     if (search) params.set("search", search)
@@ -270,6 +330,16 @@ export default function TransactionsPage() {
               <Button onClick={() => setShowBulk(true)} variant="secondary">
                 <Tags className="h-4 w-4 mr-1" /> Categorize {selected.size}
               </Button>
+              {tags.length > 0 && (
+                <Select
+                  value=""
+                  onChange={(e) => { if (e.target.value) bulkTag(e.target.value) }}
+                  className="w-40"
+                >
+                  <option value="">Tag {selected.size}...</option>
+                  {tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </Select>
+              )}
               <Button onClick={bulkDelete} variant="destructive">
                 <Trash2 className="h-4 w-4 mr-1" /> Delete {selected.size}
               </Button>
@@ -313,6 +383,15 @@ export default function TransactionsPage() {
               </Select>
               <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1) }} placeholder="From" />
               <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1) }} placeholder="To" />
+              <div className="flex gap-2">
+                <Select value={tagFilter} onChange={(e) => { setTagFilter(e.target.value); setPage(1) }} className="flex-1">
+                  <option value="">All Tags</option>
+                  {tags.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </Select>
+                <Button variant="outline" size="sm" onClick={() => setShowTagDialog(true)} className="shrink-0 text-xs">
+                  + Tag
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
@@ -379,6 +458,11 @@ export default function TransactionsPage() {
                         ) : (
                           <Badge variant="outline" className="text-zinc-500">Uncategorized</Badge>
                         )}
+                        {txn.tags?.map(tag => (
+                          <Badge key={tag.id} className="text-xs ml-1" style={{ backgroundColor: tag.color + '22', color: tag.color, borderColor: tag.color + '44' }}>
+                            {tag.name}
+                          </Badge>
+                        ))}
                       </td>
                       <td className="p-4 text-sm text-zinc-400">{txn.account_name}</td>
                       <td className={`p-4 text-sm font-medium text-right ${txn.amount >= 0 ? 'text-emerald-400' : 'text-zinc-200'}`}>
@@ -479,6 +563,38 @@ export default function TransactionsPage() {
                   placeholder="Optional notes"
                 />
               </div>
+              {tags.length > 0 && editingTxn && (
+                <div>
+                  <label className="text-sm text-zinc-400 mb-1 block">Tags</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {tags.map(tag => {
+                      const hasTag = editingTxn.tags?.some(t => t.id === tag.id)
+                      return (
+                        <button
+                          key={tag.id}
+                          onClick={() => {
+                            toggleTag(editingTxn.id, tag.id, !!hasTag)
+                            setEditingTxn({
+                              ...editingTxn,
+                              tags: hasTag
+                                ? editingTxn.tags.filter(t => t.id !== tag.id)
+                                : [...(editingTxn.tags || []), tag],
+                            })
+                          }}
+                          className={`text-xs px-2 py-1 rounded-full border transition-colors ${
+                            hasTag
+                              ? 'border-current'
+                              : 'border-zinc-700 text-zinc-500 hover:text-zinc-300'
+                          }`}
+                          style={hasTag ? { color: tag.color, borderColor: tag.color, backgroundColor: tag.color + '22' } : {}}
+                        >
+                          {tag.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
               <div className="flex justify-between">
                 <Button variant="destructive" onClick={() => editingId && deleteTransaction(editingId)}>
                   <Trash2 className="h-4 w-4 mr-1" /> Delete
@@ -610,6 +726,29 @@ export default function TransactionsPage() {
               ))}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Tag Dialog */}
+      <Dialog open={showTagDialog} onOpenChange={setShowTagDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Tag</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm text-zinc-400 mb-1 block">Name</label>
+              <Input value={newTagName} onChange={(e) => setNewTagName(e.target.value)} placeholder="e.g. tax-deductible" />
+            </div>
+            <div>
+              <label className="text-sm text-zinc-400 mb-1 block">Color</label>
+              <Input type="color" value={newTagColor} onChange={(e) => setNewTagColor(e.target.value)} className="h-10 w-20 p-1" />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowTagDialog(false)}>Cancel</Button>
+              <Button onClick={createTag} disabled={!newTagName.trim()}>Create</Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

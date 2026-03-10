@@ -55,6 +55,12 @@ export async function GET(request: NextRequest) {
       params.push(parseFloat(maxAmount))
     }
 
+    const tagId = searchParams.get('tagId')
+    if (tagId) {
+      conditions.push('t.id IN (SELECT transaction_id FROM transaction_tags WHERE tag_id = ?)')
+      params.push(tagId)
+    }
+
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
     const countResult = db.prepare(
@@ -71,6 +77,28 @@ export async function GET(request: NextRequest) {
        ORDER BY t.date DESC, t.created_at DESC
        LIMIT ? OFFSET ?`
     ).all(...params, limit, offset)
+
+    // Attach tags to each transaction
+    const txnIds = (transactions as any[]).map(t => t.id)
+    if (txnIds.length > 0) {
+      const placeholders = txnIds.map(() => '?').join(',')
+      const tagRows = db.prepare(
+        `SELECT tt.transaction_id, tg.id, tg.name, tg.color
+         FROM transaction_tags tt
+         JOIN tags tg ON tt.tag_id = tg.id
+         WHERE tt.transaction_id IN (${placeholders})`
+      ).all(...txnIds) as Array<{ transaction_id: string; id: string; name: string; color: string }>
+
+      const tagMap = new Map<string, Array<{ id: string; name: string; color: string }>>()
+      for (const row of tagRows) {
+        const list = tagMap.get(row.transaction_id) || []
+        list.push({ id: row.id, name: row.name, color: row.color })
+        tagMap.set(row.transaction_id, list)
+      }
+      for (const txn of transactions as any[]) {
+        txn.tags = tagMap.get(txn.id) || []
+      }
+    }
 
     return NextResponse.json({
       transactions,
