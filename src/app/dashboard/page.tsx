@@ -15,6 +15,9 @@ import {
   ArrowDownRight,
   Upload,
   Plus,
+  CalendarClock,
+  Check,
+  AlertCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -52,9 +55,16 @@ interface DashboardData {
   budgetUtilization: { category_name: string; category_color: string; category_icon: string; spent: number; budgeted: number }[]
 }
 
+interface Bill {
+  id: string; name: string; amount: number; frequency: string
+  next_due_date: string; isPaid: boolean; isDue: boolean; isOverdue: boolean
+  category_icon: string | null
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [bills, setBills] = useState<Bill[]>([])
 
   useEffect(() => {
     fetch("/api/dashboard")
@@ -62,6 +72,10 @@ export default function DashboardPage() {
       .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false))
+    fetch("/api/bills")
+      .then(r => r.json())
+      .then(d => setBills(d.bills || []))
+      .catch(() => {})
   }, [])
 
   if (loading) return <DashboardSkeleton />
@@ -323,6 +337,50 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Upcoming Bills */}
+      {bills.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CalendarClock className="h-4 w-4" /> Bills This Month
+            </CardTitle>
+            <Link href="/subscriptions">
+              <Button variant="ghost" size="sm" className="text-xs">View All</Button>
+            </Link>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {bills
+                .filter(b => b.isDue || b.isOverdue || b.isPaid)
+                .slice(0, 6)
+                .map(bill => (
+                  <div key={bill.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-zinc-800/30">
+                    <div className="flex items-center gap-2">
+                      {bill.isPaid ? (
+                        <Check className="h-4 w-4 text-emerald-400" />
+                      ) : bill.isOverdue ? (
+                        <AlertCircle className="h-4 w-4 text-red-400" />
+                      ) : (
+                        <CalendarClock className="h-4 w-4 text-zinc-500" />
+                      )}
+                      <span className="text-sm text-zinc-200">{bill.category_icon} {bill.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{formatCurrency(bill.amount)}</span>
+                      <Badge variant={bill.isPaid ? "success" : bill.isOverdue ? "destructive" : "secondary"} className="text-xs">
+                        {bill.isPaid ? "Paid" : bill.isOverdue ? "Overdue" : formatDate(bill.next_due_date)}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              {bills.filter(b => b.isDue || b.isOverdue || b.isPaid).length === 0 && (
+                <p className="text-xs text-zinc-500 text-center py-2">No bills due this month</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Account Balances */}
       {data.accountBalances.length > 0 && (
