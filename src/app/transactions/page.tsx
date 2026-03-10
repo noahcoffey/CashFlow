@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import { Search, Filter, ChevronLeft, ChevronRight, Save, X, Tags, Trash2, Bookmark, Download } from "lucide-react"
+import { Search, Filter, ChevronLeft, ChevronRight, Save, X, Tags, Trash2, Bookmark, Download, Copy } from "lucide-react"
 import { toast } from "sonner"
 
 interface Transaction {
@@ -64,6 +64,16 @@ export default function TransactionsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkCategoryId, setBulkCategoryId] = useState("")
   const [showBulk, setShowBulk] = useState(false)
+  const [showDuplicates, setShowDuplicates] = useState(false)
+  const [duplicateGroups, setDuplicateGroups] = useState<Array<{
+    key: string
+    transactions: Array<{
+      id: string; date: string; amount: number; raw_description: string;
+      display_name: string; account_name: string | null; category_name: string | null;
+      category_icon: string | null; created_at: string
+    }>
+  }>>([])
+  const [duplicatesLoading, setDuplicatesLoading] = useState(false)
 
   const limit = 25
 
@@ -207,6 +217,36 @@ export default function TransactionsPage() {
     toast.success(`${count} transactions deleted`)
   }
 
+  const scanDuplicates = async () => {
+    setDuplicatesLoading(true)
+    setShowDuplicates(true)
+    try {
+      const res = await fetch("/api/transactions/duplicates")
+      const data = await res.json()
+      setDuplicateGroups(data.groups || [])
+    } catch {
+      toast.error("Failed to scan for duplicates")
+    } finally {
+      setDuplicatesLoading(false)
+    }
+  }
+
+  const deleteDuplicate = async (id: string) => {
+    await fetch("/api/transactions", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    })
+    // Remove from local state
+    setDuplicateGroups(prev =>
+      prev
+        .map(g => ({ ...g, transactions: g.transactions.filter(t => t.id !== id) }))
+        .filter(g => g.transactions.length >= 2)
+    )
+    fetchTransactions()
+    toast.success("Duplicate removed")
+  }
+
   const exportCSV = () => {
     const params = new URLSearchParams()
     if (search) params.set("search", search)
@@ -235,6 +275,9 @@ export default function TransactionsPage() {
               </Button>
             </>
           )}
+          <Button onClick={scanDuplicates} variant="outline">
+            <Copy className="h-4 w-4 mr-1" /> Duplicates
+          </Button>
           <Button onClick={exportCSV} variant="outline">
             <Download className="h-4 w-4 mr-1" /> Export
           </Button>
@@ -515,6 +558,58 @@ export default function TransactionsPage() {
               <Button onClick={bulkCategorize} disabled={!bulkCategoryId}>Apply</Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Duplicates Dialog */}
+      <Dialog open={showDuplicates} onOpenChange={setShowDuplicates}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Duplicate Detection</DialogTitle>
+          </DialogHeader>
+          {duplicatesLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-20" />
+              <Skeleton className="h-20" />
+            </div>
+          ) : duplicateGroups.length === 0 ? (
+            <p className="text-zinc-500 text-center py-8">No potential duplicates found.</p>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-zinc-400">{duplicateGroups.length} potential duplicate group{duplicateGroups.length !== 1 ? 's' : ''} found</p>
+              {duplicateGroups.map((group) => (
+                <div key={group.key} className="border border-zinc-800 rounded-lg p-3 space-y-2">
+                  {group.transactions.map((txn) => (
+                    <div key={txn.id} className="flex items-center justify-between py-2 px-3 rounded bg-zinc-800/30">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-zinc-200">
+                            {txn.display_name || txn.raw_description}
+                          </span>
+                          {txn.category_name && (
+                            <Badge variant="secondary" className="text-xs">{txn.category_icon} {txn.category_name}</Badge>
+                          )}
+                        </div>
+                        <div className="flex gap-3 text-xs text-zinc-500 mt-0.5">
+                          <span>{formatDate(txn.date)}</span>
+                          <span>{formatCurrency(txn.amount)}</span>
+                          {txn.account_name && <span>{txn.account_name}</span>}
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-400 text-xs shrink-0"
+                        onClick={() => deleteDuplicate(txn.id)}
+                      >
+                        <Trash2 className="h-3 w-3 mr-1" /> Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
