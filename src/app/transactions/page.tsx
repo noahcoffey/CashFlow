@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import { Search, Filter, ChevronLeft, ChevronRight, Save, X, Tags, Trash2, Bookmark } from "lucide-react"
+import { Search, Filter, ChevronLeft, ChevronRight, Save, X, Tags, Trash2, Bookmark, Download } from "lucide-react"
 import { toast } from "sonner"
 
 interface Transaction {
@@ -207,6 +207,16 @@ export default function TransactionsPage() {
     toast.success(`${count} transactions deleted`)
   }
 
+  const exportCSV = () => {
+    const params = new URLSearchParams()
+    if (search) params.set("search", search)
+    if (accountFilter) params.set("accountId", accountFilter)
+    if (categoryFilter) params.set("categoryId", categoryFilter)
+    if (dateFrom) params.set("startDate", dateFrom)
+    if (dateTo) params.set("endDate", dateTo)
+    window.open(`/api/transactions/export?${params}`, '_blank')
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -214,16 +224,21 @@ export default function TransactionsPage() {
           <h1 className="text-2xl font-bold">Transactions</h1>
           <p className="text-zinc-500 text-sm">{total} total transactions</p>
         </div>
-        {selected.size > 0 && (
-          <div className="flex gap-2">
-            <Button onClick={() => setShowBulk(true)} variant="secondary">
-              <Tags className="h-4 w-4 mr-1" /> Categorize {selected.size}
-            </Button>
-            <Button onClick={bulkDelete} variant="destructive">
-              <Trash2 className="h-4 w-4 mr-1" /> Delete {selected.size}
-            </Button>
-          </div>
-        )}
+        <div className="flex gap-2">
+          {selected.size > 0 && (
+            <>
+              <Button onClick={() => setShowBulk(true)} variant="secondary">
+                <Tags className="h-4 w-4 mr-1" /> Categorize {selected.size}
+              </Button>
+              <Button onClick={bulkDelete} variant="destructive">
+                <Trash2 className="h-4 w-4 mr-1" /> Delete {selected.size}
+              </Button>
+            </>
+          )}
+          <Button onClick={exportCSV} variant="outline">
+            <Download className="h-4 w-4 mr-1" /> Export
+          </Button>
+        </div>
       </div>
 
       {/* Search & Filters */}
