@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { formatDate } from "@/lib/utils"
-import { Plus, Trash2, Edit2, Building2, Tag, RefreshCw, Tags } from "lucide-react"
+import { Plus, Trash2, Edit2, Building2, Tag, RefreshCw, Tags, Zap, Play, Pause } from "lucide-react"
 import { toast } from "sonner"
 
 interface Account {
@@ -29,6 +29,24 @@ interface TagItem {
   id: string; name: string; color: string; usage_count: number;
 }
 
+interface RuleCondition {
+  field: 'description' | 'amount' | 'account'
+  operator: string
+  value: string
+  value2?: string
+}
+
+interface RuleAction {
+  type: 'set_category' | 'set_display_name' | 'add_tag'
+  value: string
+}
+
+interface Rule {
+  id: string; name: string; priority: number; conditions: RuleCondition[]
+  actions: RuleAction[]; is_active: number; match_count: number
+  category_name?: string; category_icon?: string
+}
+
 export default function SettingsPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [aliases, setAliases] = useState<Alias[]>([])
@@ -43,12 +61,22 @@ export default function SettingsPage() {
   const [tagsList, setTagsList] = useState<TagItem[]>([])
   const [showTagDialog, setShowTagDialog] = useState(false)
   const [tagForm, setTagForm] = useState({ id: "", name: "", color: "#6B7280" })
+  const [rules, setRules] = useState<Rule[]>([])
+  const [showRuleDialog, setShowRuleDialog] = useState(false)
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null)
+  const [ruleName, setRuleName] = useState("")
+  const [rulePriority, setRulePriority] = useState("0")
+  const [ruleConditions, setRuleConditions] = useState<RuleCondition[]>([{ field: 'description', operator: 'contains', value: '' }])
+  const [ruleActions, setRuleActions] = useState<RuleAction[]>([{ type: 'set_category', value: '' }])
+  const [ruleApplyRetro, setRuleApplyRetro] = useState(true)
+  const [applyingRules, setApplyingRules] = useState(false)
 
   const fetchData = () => {
     fetch("/api/accounts").then(r => r.json()).then(d => setAccounts(d.accounts || []))
     fetch("/api/aliases").then(r => r.json()).then(d => setAliases(d.aliases || []))
     fetch("/api/categories").then(r => r.json()).then(d => setCategories(d.categories || []))
     fetch("/api/tags").then(r => r.json()).then(d => setTagsList(d.tags || []))
+    fetch("/api/rules").then(r => r.json()).then(d => setRules(d.rules || []))
   }
 
   useEffect(() => { fetchData() }, [])
@@ -142,6 +170,92 @@ export default function SettingsPage() {
     setTagForm({ id: "", name: "", color: "#6B7280" })
     fetchData()
     toast.success("Tag saved")
+  }
+
+  const openNewRule = () => {
+    setEditingRuleId(null)
+    setRuleName("")
+    setRulePriority("0")
+    setRuleConditions([{ field: 'description', operator: 'contains', value: '' }])
+    setRuleActions([{ type: 'set_category', value: '' }])
+    setRuleApplyRetro(true)
+    setShowRuleDialog(true)
+  }
+
+  const editRule = (rule: Rule) => {
+    setEditingRuleId(rule.id)
+    setRuleName(rule.name)
+    setRulePriority(String(rule.priority))
+    setRuleConditions(rule.conditions)
+    setRuleActions(rule.actions)
+    setShowRuleDialog(true)
+  }
+
+  const saveRule = async () => {
+    if (!ruleName || ruleConditions.some(c => !c.value) || ruleActions.some(a => !a.value)) return
+    const method = editingRuleId ? "PUT" : "POST"
+    const body: any = {
+      name: ruleName,
+      priority: parseInt(rulePriority) || 0,
+      conditions: ruleConditions,
+      actions: ruleActions,
+    }
+    if (editingRuleId) body.id = editingRuleId
+    else body.apply_retroactively = ruleApplyRetro
+
+    const res = await fetch("/api/rules", {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+    const data = await res.json()
+    setShowRuleDialog(false)
+    setEditingRuleId(null)
+    fetchData()
+    if (data.retroactive?.matched > 0) {
+      toast.success(`Rule saved — matched ${data.retroactive.matched} transaction${data.retroactive.matched > 1 ? 's' : ''}`)
+    } else {
+      toast.success("Rule saved")
+    }
+  }
+
+  const deleteRule = async (id: string) => {
+    await fetch("/api/rules", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    })
+    fetchData()
+    toast.success("Rule deleted")
+  }
+
+  const toggleRule = async (rule: Rule) => {
+    await fetch("/api/rules", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: rule.id, is_active: rule.is_active ? 0 : 1 }),
+    })
+    fetchData()
+  }
+
+  const applyAllRules = async () => {
+    setApplyingRules(true)
+    try {
+      const res = await fetch("/api/rules/apply", { method: "POST" })
+      const data = await res.json()
+      toast.success(`Applied rules: ${data.matched} of ${data.total} transactions matched`)
+      fetchData()
+    } catch {
+      toast.error("Failed to apply rules")
+    } finally {
+      setApplyingRules(false)
+    }
+  }
+
+  const operatorLabels: Record<string, string> = {
+    contains: 'contains', starts_with: 'starts with', ends_with: 'ends with',
+    equals: 'equals', regex: 'matches regex',
+    gt: '>', lt: '<', gte: '>=', lte: '<=', between: 'between',
   }
 
   const deleteTag = async (id: string) => {
@@ -290,6 +404,78 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Categorization Rules */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2"><Zap className="h-5 w-5" /> Categorization Rules</CardTitle>
+            <CardDescription>Auto-categorize transactions based on conditions</CardDescription>
+          </div>
+          <div className="flex gap-2">
+            {rules.length > 0 && (
+              <Button onClick={applyAllRules} variant="outline" size="sm" disabled={applyingRules}>
+                {applyingRules ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <Play className="h-4 w-4 mr-1" />}
+                Apply All
+              </Button>
+            )}
+            <Button onClick={openNewRule} size="sm">
+              <Plus className="h-4 w-4 mr-1" /> Add Rule
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {rules.length === 0 ? (
+            <div className="py-8 text-center text-zinc-500">
+              <p>No rules yet. Rules run automatically on import and can set categories, display names, or tags.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {rules.map(rule => (
+                <div key={rule.id} className={`flex items-center justify-between py-3 px-4 rounded-lg bg-zinc-800/30 hover:bg-zinc-800/50 ${!rule.is_active ? 'opacity-50' : ''}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-zinc-200">{rule.name}</p>
+                      <Badge variant="secondary" className="text-xs">Priority {rule.priority}</Badge>
+                      {!rule.is_active && <Badge variant="secondary" className="text-xs text-zinc-500">Disabled</Badge>}
+                    </div>
+                    <div className="text-xs text-zinc-500 mt-0.5">
+                      {rule.conditions.map((c, i) => (
+                        <span key={i}>
+                          {i > 0 && ' AND '}
+                          {c.field} {operatorLabels[c.operator]} &quot;{c.value}&quot;
+                          {c.operator === 'between' && ` and "${c.value2}"`}
+                        </span>
+                      ))}
+                      {' → '}
+                      {rule.actions.map((a, i) => (
+                        <span key={i}>
+                          {i > 0 && ', '}
+                          {a.type === 'set_category' && `category: ${rule.category_name || a.value}`}
+                          {a.type === 'set_display_name' && `name: "${a.value}"`}
+                          {a.type === 'add_tag' && `tag: ${a.value}`}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 ml-4">
+                    <span className="text-xs text-zinc-600">{rule.match_count} matches</span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toggleRule(rule)}>
+                      {rule.is_active ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => editRule(rule)}>
+                      <Edit2 className="h-3 w-3" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400" onClick={() => deleteRule(rule.id)}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Account Dialog */}
       <Dialog open={showAccountDialog} onOpenChange={setShowAccountDialog}>
         <DialogContent>
@@ -390,6 +576,197 @@ export default function SettingsPage() {
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setShowTagDialog(false)}>Cancel</Button>
               <Button onClick={saveTag} disabled={!tagForm.name.trim()}>Save</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rule Dialog */}
+      <Dialog open={showRuleDialog} onOpenChange={(open) => { setShowRuleDialog(open); if (!open) setEditingRuleId(null) }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editingRuleId ? "Edit" : "New"} Categorization Rule</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm text-zinc-400 mb-1 block">Rule Name *</label>
+                <Input value={ruleName} onChange={e => setRuleName(e.target.value)} placeholder="e.g. Starbucks → Food" />
+              </div>
+              <div>
+                <label className="text-sm text-zinc-400 mb-1 block">Priority</label>
+                <Input type="number" value={rulePriority} onChange={e => setRulePriority(e.target.value)} placeholder="0" />
+                <p className="text-xs text-zinc-600 mt-0.5">Higher = runs first</p>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm text-zinc-400 mb-1 block">Conditions (all must match)</label>
+              <div className="space-y-2">
+                {ruleConditions.map((cond, i) => (
+                  <div key={i} className="flex gap-2 items-start">
+                    <Select
+                      value={cond.field}
+                      onChange={e => {
+                        const updated = [...ruleConditions]
+                        updated[i] = { ...cond, field: e.target.value as any, operator: e.target.value === 'amount' ? 'gt' : 'contains', value: '' }
+                        setRuleConditions(updated)
+                      }}
+                      className="w-32"
+                    >
+                      <option value="description">Description</option>
+                      <option value="amount">Amount</option>
+                      <option value="account">Account</option>
+                    </Select>
+                    <Select
+                      value={cond.operator}
+                      onChange={e => {
+                        const updated = [...ruleConditions]
+                        updated[i] = { ...cond, operator: e.target.value }
+                        setRuleConditions(updated)
+                      }}
+                      className="w-32"
+                    >
+                      {cond.field === 'amount' ? (
+                        <>
+                          <option value="gt">&gt;</option>
+                          <option value="lt">&lt;</option>
+                          <option value="gte">&gt;=</option>
+                          <option value="lte">&lt;=</option>
+                          <option value="equals">=</option>
+                          <option value="between">between</option>
+                        </>
+                      ) : cond.field === 'account' ? (
+                        <option value="equals">is</option>
+                      ) : (
+                        <>
+                          <option value="contains">contains</option>
+                          <option value="starts_with">starts with</option>
+                          <option value="ends_with">ends with</option>
+                          <option value="equals">equals</option>
+                          <option value="regex">regex</option>
+                        </>
+                      )}
+                    </Select>
+                    <Input
+                      value={cond.value}
+                      onChange={e => {
+                        const updated = [...ruleConditions]
+                        updated[i] = { ...cond, value: e.target.value }
+                        setRuleConditions(updated)
+                      }}
+                      placeholder={cond.field === 'amount' ? '0.00' : 'value'}
+                      className="flex-1"
+                    />
+                    {cond.operator === 'between' && (
+                      <Input
+                        value={cond.value2 || ''}
+                        onChange={e => {
+                          const updated = [...ruleConditions]
+                          updated[i] = { ...cond, value2: e.target.value }
+                          setRuleConditions(updated)
+                        }}
+                        placeholder="max"
+                        className="w-24"
+                      />
+                    )}
+                    {ruleConditions.length > 1 && (
+                      <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 text-red-400"
+                        onClick={() => setRuleConditions(ruleConditions.filter((_, j) => j !== i))}>
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button variant="outline" size="sm" onClick={() => setRuleConditions([...ruleConditions, { field: 'description', operator: 'contains', value: '' }])}>
+                  <Plus className="h-3 w-3 mr-1" /> Add Condition
+                </Button>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm text-zinc-400 mb-1 block">Actions</label>
+              <div className="space-y-2">
+                {ruleActions.map((action, i) => (
+                  <div key={i} className="flex gap-2 items-start">
+                    <Select
+                      value={action.type}
+                      onChange={e => {
+                        const updated = [...ruleActions]
+                        updated[i] = { type: e.target.value as any, value: '' }
+                        setRuleActions(updated)
+                      }}
+                      className="w-44"
+                    >
+                      <option value="set_category">Set Category</option>
+                      <option value="set_display_name">Set Display Name</option>
+                      <option value="add_tag">Add Tag</option>
+                    </Select>
+                    {action.type === 'set_category' ? (
+                      <Select
+                        value={action.value}
+                        onChange={e => {
+                          const updated = [...ruleActions]
+                          updated[i] = { ...action, value: e.target.value }
+                          setRuleActions(updated)
+                        }}
+                        className="flex-1"
+                      >
+                        <option value="">Select category...</option>
+                        {categories.map(c => (
+                          <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                        ))}
+                      </Select>
+                    ) : action.type === 'add_tag' ? (
+                      <Select
+                        value={action.value}
+                        onChange={e => {
+                          const updated = [...ruleActions]
+                          updated[i] = { ...action, value: e.target.value }
+                          setRuleActions(updated)
+                        }}
+                        className="flex-1"
+                      >
+                        <option value="">Select tag...</option>
+                        {tagsList.map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </Select>
+                    ) : (
+                      <Input
+                        value={action.value}
+                        onChange={e => {
+                          const updated = [...ruleActions]
+                          updated[i] = { ...action, value: e.target.value }
+                          setRuleActions(updated)
+                        }}
+                        placeholder="Display name"
+                        className="flex-1"
+                      />
+                    )}
+                    {ruleActions.length > 1 && (
+                      <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 text-red-400"
+                        onClick={() => setRuleActions(ruleActions.filter((_, j) => j !== i))}>
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button variant="outline" size="sm" onClick={() => setRuleActions([...ruleActions, { type: 'set_category', value: '' }])}>
+                  <Plus className="h-3 w-3 mr-1" /> Add Action
+                </Button>
+              </div>
+            </div>
+
+            {!editingRuleId && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <Checkbox checked={ruleApplyRetro} onCheckedChange={(v) => setRuleApplyRetro(!!v)} />
+                <span className="text-sm text-zinc-300">Apply to all existing transactions</span>
+              </label>
+            )}
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowRuleDialog(false)}>Cancel</Button>
+              <Button onClick={saveRule}>{editingRuleId ? "Save" : "Create"} Rule</Button>
             </div>
           </div>
         </DialogContent>

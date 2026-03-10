@@ -79,6 +79,18 @@ function initializeSchema(db: Database.Database) {
       created_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS scheduled_bills (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      amount REAL NOT NULL,
+      frequency TEXT NOT NULL CHECK(frequency IN ('weekly', 'biweekly', 'monthly', 'quarterly', 'annual')),
+      next_due_date TEXT NOT NULL,
+      category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
+      account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+      is_active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS transaction_splits (
       id TEXT PRIMARY KEY,
       transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
@@ -109,6 +121,17 @@ function initializeSchema(db: Database.Database) {
       id TEXT PRIMARY KEY,
       type TEXT NOT NULL,
       result TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS categorization_rules (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      priority INTEGER DEFAULT 0,
+      conditions TEXT NOT NULL,
+      actions TEXT NOT NULL,
+      is_active INTEGER DEFAULT 1,
+      match_count INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
     );
 

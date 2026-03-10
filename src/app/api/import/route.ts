@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import { applyAliasesToTransactions } from '@/lib/alias-engine'
+import { applyRulesToTransactions } from '@/lib/rules-engine'
 import { parseDate } from '@/lib/csv-parser'
 
 export async function POST(request: Request) {
@@ -58,14 +59,17 @@ export async function POST(request: Request) {
 
     importAll()
 
-    // Apply alias matching to newly imported transactions
+    // Apply alias matching and rules to newly imported transactions
     let matched = 0
+    let rulesMatched = 0
     if (newIds.length > 0) {
-      const result = applyAliasesToTransactions(newIds)
-      matched = result.matched
+      const aliasResult = applyAliasesToTransactions(newIds)
+      matched = aliasResult.matched
+      const rulesResult = applyRulesToTransactions(newIds)
+      rulesMatched = rulesResult.matched
     }
 
-    return NextResponse.json({ imported, duplicates, matched })
+    return NextResponse.json({ imported, duplicates, matched, rulesMatched })
   } catch (error) {
     console.error('Error importing transactions:', error)
     return NextResponse.json({ error: 'Failed to import transactions' }, { status: 500 })
