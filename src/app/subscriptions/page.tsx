@@ -3,10 +3,13 @@
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Select } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import { RefreshCw, CalendarClock, TrendingDown } from "lucide-react"
+import { RefreshCw, CalendarClock, TrendingDown, Plus, Trash2, Check, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 
 interface RecurringPattern {
@@ -21,10 +24,63 @@ interface RecurringPattern {
   transactionIds: string[]
 }
 
+interface Bill {
+  id: string; name: string; amount: number; frequency: string
+  next_due_date: string; isPaid: boolean; isDue: boolean; isOverdue: boolean
+  category_icon: string | null; category_name: string | null
+}
+
 export default function SubscriptionsPage() {
   const [patterns, setPatterns] = useState<RecurringPattern[]>([])
   const [totalMonthly, setTotalMonthly] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [bills, setBills] = useState<Bill[]>([])
+  const [showBillDialog, setShowBillDialog] = useState(false)
+  const [billForm, setBillForm] = useState({
+    name: "", amount: "", frequency: "monthly", next_due_date: ""
+  })
+
+  const fetchBills = () => {
+    fetch("/api/bills").then(r => r.json()).then(d => setBills(d.bills || []))
+  }
+
+  const createBill = async () => {
+    if (!billForm.name || !billForm.amount || !billForm.next_due_date) return
+    await fetch("/api/bills", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: billForm.name,
+        amount: -Math.abs(parseFloat(billForm.amount)),
+        frequency: billForm.frequency,
+        next_due_date: billForm.next_due_date,
+      }),
+    })
+    setShowBillDialog(false)
+    setBillForm({ name: "", amount: "", frequency: "monthly", next_due_date: "" })
+    fetchBills()
+    toast.success("Bill scheduled")
+  }
+
+  const createBillFromPattern = (p: RecurringPattern) => {
+    setBillForm({
+      name: p.merchant,
+      amount: Math.abs(p.amount).toFixed(2),
+      frequency: p.frequency,
+      next_due_date: p.nextExpected,
+    })
+    setShowBillDialog(true)
+  }
+
+  const deleteBill = async (id: string) => {
+    await fetch("/api/bills", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    })
+    fetchBills()
+    toast.success("Bill removed")
+  }
 
   const fetch_ = async () => {
     setLoading(true)
@@ -40,7 +96,7 @@ export default function SubscriptionsPage() {
     }
   }
 
-  useEffect(() => { fetch_() }, [])
+  useEffect(() => { fetch_(); fetchBills() }, [])
 
   const totalAnnual = patterns.reduce((s, p) => s + p.totalAnnual, 0)
 
@@ -147,9 +203,19 @@ export default function SubscriptionsPage() {
                         <span>{p.occurrences} occurrences</span>
                       </div>
                     </div>
-                    <div className="text-right ml-4 shrink-0">
-                      <p className="font-medium text-zinc-200">{formatCurrency(p.amount)}</p>
-                      <p className="text-xs text-zinc-500">{formatCurrency(p.totalAnnual)}/yr</p>
+                    <div className="flex items-center gap-3 ml-4 shrink-0">
+                      <div className="text-right">
+                        <p className="font-medium text-zinc-200">{formatCurrency(p.amount)}</p>
+                        <p className="text-xs text-zinc-500">{formatCurrency(p.totalAnnual)}/yr</p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                        onClick={() => createBillFromPattern(p)}
+                      >
+                        <Plus className="h-3 w-3 mr-1" /> Schedule
+                      </Button>
                     </div>
                   </div>
                 )
@@ -158,6 +224,117 @@ export default function SubscriptionsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Scheduled Bills */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <CalendarClock className="h-5 w-5" /> Scheduled Bills
+            </CardTitle>
+            <Button size="sm" onClick={() => setShowBillDialog(true)}>
+              <Plus className="h-4 w-4 mr-1" /> Add Bill
+            </Button>
+          </div>
+          <CardDescription>Track upcoming and overdue bills</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {bills.length === 0 ? (
+            <div className="py-8 text-center text-zinc-500">
+              <p>No bills scheduled yet. Add one manually or click &quot;Schedule&quot; on a detected recurring charge above.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {bills.map(bill => (
+                <div key={bill.id} className="flex items-center justify-between py-3 px-4 rounded-lg bg-zinc-800/30 hover:bg-zinc-800/50">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    {bill.isPaid ? (
+                      <Check className="h-5 w-5 text-green-400 shrink-0" />
+                    ) : bill.isOverdue ? (
+                      <AlertCircle className="h-5 w-5 text-red-400 shrink-0" />
+                    ) : (
+                      <CalendarClock className="h-5 w-5 text-zinc-500 shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-zinc-200 truncate">{bill.name}</p>
+                        <Badge variant="secondary" className={`text-xs ${frequencyColor[bill.frequency]}`}>
+                          {frequencyLabel[bill.frequency]}
+                        </Badge>
+                        {bill.isPaid && <Badge variant="success" className="text-xs">Paid</Badge>}
+                        {bill.isOverdue && !bill.isPaid && <Badge variant="destructive" className="text-xs">Overdue</Badge>}
+                      </div>
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Due: {formatDate(bill.next_due_date)}
+                        {bill.category_name && ` · ${bill.category_icon || ''} ${bill.category_name}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 ml-4 shrink-0">
+                    <p className="font-medium text-zinc-200">{formatCurrency(bill.amount)}</p>
+                    <Button variant="ghost" size="sm" onClick={() => deleteBill(bill.id)}>
+                      <Trash2 className="h-4 w-4 text-zinc-500 hover:text-red-400" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Bill Creation Dialog */}
+      <Dialog open={showBillDialog} onOpenChange={setShowBillDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Schedule a Bill</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div>
+              <label className="text-sm text-zinc-400 mb-1 block">Name</label>
+              <Input
+                value={billForm.name}
+                onChange={e => setBillForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="e.g. Netflix, Rent, Electric"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-zinc-400 mb-1 block">Amount</label>
+              <Input
+                type="number"
+                step="0.01"
+                value={billForm.amount}
+                onChange={e => setBillForm(f => ({ ...f, amount: e.target.value }))}
+                placeholder="0.00"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-zinc-400 mb-1 block">Frequency</label>
+              <Select
+                value={billForm.frequency}
+                onChange={e => setBillForm(f => ({ ...f, frequency: e.target.value }))}
+              >
+                <option value="weekly">Weekly</option>
+                <option value="biweekly">Bi-weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="annual">Annual</option>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm text-zinc-400 mb-1 block">Next Due Date</label>
+              <Input
+                type="date"
+                value={billForm.next_due_date}
+                onChange={e => setBillForm(f => ({ ...f, next_due_date: e.target.value }))}
+              />
+            </div>
+            <Button className="w-full" onClick={createBill}>
+              <Plus className="h-4 w-4 mr-1" /> Schedule Bill
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
