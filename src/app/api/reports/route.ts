@@ -132,6 +132,63 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ data, accounts: accounts.map(a => a.name) })
       }
 
+      case 'year-over-year': {
+        // Get all years with data
+        const yearsResult = db.prepare(
+          `SELECT DISTINCT substr(date, 1, 4) as year FROM transactions ORDER BY year`
+        ).all() as { year: string }[]
+        const years = yearsResult.map(y => y.year)
+
+        if (years.length === 0) {
+          return NextResponse.json({ data: [], years: [] })
+        }
+
+        // For each month (1-12), get spending per year
+        const data = []
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        for (let m = 1; m <= 12; m++) {
+          const monthStr = m.toString().padStart(2, '0')
+          const row: Record<string, any> = { month: monthNames[m - 1] }
+
+          for (const year of years) {
+            const result = db.prepare(
+              `SELECT COALESCE(SUM(ABS(amount)), 0) as total
+               FROM transactions
+               WHERE date >= ? AND date <= ? AND amount < 0`
+            ).get(`${year}-${monthStr}-01`, `${year}-${monthStr}-31`) as { total: number }
+
+            row[year] = result.total
+          }
+          data.push(row)
+        }
+
+        // Category breakdown per year
+        const categoryByYear = years.map(year => {
+          const cats = db.prepare(
+            `SELECT c.name, c.color, c.icon, SUM(ABS(t.amount)) as total
+             FROM transactions t
+             JOIN categories c ON t.category_id = c.id
+             WHERE substr(t.date, 1, 4) = ? AND t.amount < 0
+             GROUP BY c.id
+             ORDER BY total DESC
+             LIMIT 10`
+          ).all(year) as { name: string; color: string; icon: string; total: number }[]
+          return { year, categories: cats }
+        })
+
+        // Year totals
+        const yearTotals = years.map(year => {
+          const result = db.prepare(
+            `SELECT COALESCE(SUM(ABS(amount)), 0) as expenses,
+                    COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) as income
+             FROM transactions WHERE substr(date, 1, 4) = ?`
+          ).get(year) as { expenses: number; income: number }
+          return { year, ...result }
+        })
+
+        return NextResponse.json({ data, years, categoryByYear, yearTotals })
+      }
+
       default:
         return NextResponse.json({ error: `Unknown report type: ${type}` }, { status: 400 })
     }

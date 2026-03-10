@@ -10,10 +10,11 @@ import { formatCurrency } from "@/lib/utils"
 import { Download } from "lucide-react"
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, Legend,
+  PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area,
 } from "recharts"
+import { Badge } from "@/components/ui/badge"
 
-type ReportType = "spending-by-category" | "monthly-trends" | "income-vs-expenses" | "net-worth"
+type ReportType = "spending-by-category" | "monthly-trends" | "income-vs-expenses" | "net-worth" | "year-over-year"
 
 export default function ReportsPage() {
   const [reportType, setReportType] = useState<ReportType>("spending-by-category")
@@ -92,6 +93,7 @@ export default function ReportsPage() {
               <option value="monthly-trends">Monthly Trends</option>
               <option value="income-vs-expenses">Income vs Expenses</option>
               <option value="net-worth">Net Worth Over Time</option>
+              <option value="year-over-year">Year-over-Year Comparison</option>
             </Select>
             <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-auto" />
             <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-auto" />
@@ -109,6 +111,7 @@ export default function ReportsPage() {
               {reportType === "monthly-trends" && "Monthly Spending Trends"}
               {reportType === "income-vs-expenses" && "Income vs Expenses"}
               {reportType === "net-worth" && "Net Worth Over Time"}
+              {reportType === "year-over-year" && "Year-over-Year Spending Comparison"}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -208,6 +211,73 @@ export default function ReportsPage() {
                     </LineChart>
                   </ResponsiveContainer>
                 )}
+
+                {reportType === "year-over-year" && (() => {
+                  const years: string[] = rawData.years || []
+                  const yearTotals: { year: string; expenses: number; income: number }[] = rawData.yearTotals || []
+                  const categoryByYear: { year: string; categories: { name: string; color: string; icon: string; total: number }[] }[] = rawData.categoryByYear || []
+
+                  return (
+                    <div className="space-y-8">
+                      {/* Year summary cards */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {yearTotals.map((yt, i) => (
+                          <div key={yt.year} className="p-4 rounded-lg bg-zinc-800/40 border border-zinc-700/50">
+                            <p className="text-lg font-bold text-zinc-200">{yt.year}</p>
+                            <p className="text-sm text-red-400">{formatCurrency(yt.expenses)} spent</p>
+                            <p className="text-sm text-green-400">{formatCurrency(yt.income)} earned</p>
+                            {i > 0 && yearTotals[i - 1].expenses > 0 && (
+                              <Badge
+                                variant={yt.expenses > yearTotals[i - 1].expenses ? "destructive" : "success"}
+                                className="mt-1 text-xs"
+                              >
+                                {yt.expenses > yearTotals[i - 1].expenses ? "+" : ""}
+                                {(((yt.expenses - yearTotals[i - 1].expenses) / yearTotals[i - 1].expenses) * 100).toFixed(1)}%
+                              </Badge>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Monthly comparison chart */}
+                      <ResponsiveContainer width="100%" height={400}>
+                        <BarChart data={rawData.data}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                          <XAxis dataKey="month" stroke="#71717a" fontSize={12} />
+                          <YAxis stroke="#71717a" fontSize={12} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                          <Tooltip
+                            contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px' }}
+                            formatter={(value) => formatCurrency(Number(value))}
+                          />
+                          <Legend />
+                          {years.map((year, i) => (
+                            <Bar key={year} dataKey={year} fill={COLORS[i % COLORS.length]} radius={[4, 4, 0, 0]} />
+                          ))}
+                        </BarChart>
+                      </ResponsiveContainer>
+
+                      {/* Top categories per year */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {categoryByYear.map(cy => (
+                          <div key={cy.year} className="rounded-lg border border-zinc-700/50 p-4">
+                            <p className="font-bold text-zinc-200 mb-3">{cy.year} Top Categories</p>
+                            <div className="space-y-2">
+                              {cy.categories.map((cat, i) => (
+                                <div key={i} className="flex items-center justify-between text-sm">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
+                                    <span className="text-zinc-300">{cat.icon} {cat.name}</span>
+                                  </div>
+                                  <span className="text-zinc-400 font-medium">{formatCurrency(cat.total)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
               </>
             )}
           </CardContent>
