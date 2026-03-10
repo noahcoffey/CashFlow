@@ -11,6 +11,7 @@ import {
   Upload,
   Settings,
   Sparkles,
+  CalendarClock,
   Menu,
   X,
 } from "lucide-react"
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/transactions", label: "Transactions", icon: ArrowLeftRight },
   { href: "/budgets", label: "Budgets", icon: PiggyBank },
   { href: "/reports", label: "Reports", icon: BarChart3 },
+  { href: "/subscriptions", label: "Subscriptions", icon: CalendarClock },
   { href: "/reconcile", label: "Reconcile", icon: CheckSquare },
   { href: "/import", label: "Import", icon: Upload },
   { href: "/insights", label: "Insights", icon: Sparkles },
