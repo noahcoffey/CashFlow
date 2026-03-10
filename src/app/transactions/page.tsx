@@ -50,6 +50,39 @@ interface Account {
   name: string
 }
 
+function SplitActions({ splits, txnAmount, onAddRow, onRemoveSplit, onCancel, onSave }: {
+  splits: Array<{ amount: string }>
+  txnAmount: number
+  onAddRow: () => void
+  onRemoveSplit: () => void
+  onCancel: () => void
+  onSave: () => void
+}) {
+  const splitSum = splits.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
+  const balanced = Math.abs(splitSum - txnAmount) < 0.01
+  return (
+    <>
+      <div className="flex items-center justify-between pt-1">
+        <Button variant="outline" size="sm" onClick={onAddRow} className="text-xs">
+          + Add Row
+        </Button>
+        <span className={`text-xs ${balanced ? 'text-emerald-400' : 'text-red-400'}`}>
+          {balanced ? 'Balanced' : `Remaining: ${formatCurrency(txnAmount - splitSum)}`}
+        </span>
+      </div>
+      <div className="flex justify-between pt-2">
+        <Button variant="outline" size="sm" onClick={onRemoveSplit} className="text-xs">
+          Remove Split
+        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={onCancel}>Cancel</Button>
+          <Button onClick={onSave} disabled={!balanced || splits.length < 2}>Save Split</Button>
+        </div>
+      </div>
+    </>
+  )
+}
+
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -66,7 +99,9 @@ export default function TransactionsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingTxn, setEditingTxn] = useState<Transaction | null>(null)
   const [editForm, setEditForm] = useState({ display_name: "", category_id: "", notes: "" })
-  const [editTab, setEditTab] = useState<"edit" | "alias">("edit")
+  const [editTab, setEditTab] = useState<"edit" | "alias" | "split">("edit")
+  const [splits, setSplits] = useState<Array<{ category_id: string; amount: string; description: string }>>([])
+  const [splitsLoading, setSplitsLoading] = useState(false)
   const [aliasForm, setAliasForm] = useState({ raw_pattern: "", display_name: "", category_id: "" })
   const [aliasApplyAll, setAliasApplyAll] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -141,6 +176,19 @@ export default function TransactionsPage() {
       category_id: txn.category_id || "",
     })
     setAliasApplyAll(true)
+    // Fetch existing splits
+    setSplits([])
+    fetch(`/api/transactions/splits?transactionId=${txn.id}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.splits?.length > 0) {
+          setSplits(d.splits.map((s: any) => ({
+            category_id: s.category_id || "",
+            amount: String(s.amount),
+            description: s.description || "",
+          })))
+        }
+      })
   }
 
   const saveEdit = async () => {
@@ -230,6 +278,48 @@ export default function TransactionsPage() {
     setSelected(new Set())
     fetchTransactions()
     toast.success(`${count} transactions deleted`)
+  }
+
+  const saveSplits = async () => {
+    if (!editingTxn) return
+    const splitData = splits.map(s => ({
+      category_id: s.category_id || null,
+      amount: parseFloat(s.amount) || 0,
+      description: s.description,
+    }))
+    const res = await fetch("/api/transactions/splits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transaction_id: editingTxn.id, splits: splitData }),
+    })
+    const data = await res.json()
+    if (res.ok) {
+      setEditingId(null)
+      setEditingTxn(null)
+      fetchTransactions()
+      toast.success(splits.length > 1 ? `Split into ${splits.length} categories` : "Split removed")
+    } else {
+      toast.error(data.error || "Failed to save splits")
+    }
+  }
+
+  const addSplitRow = () => {
+    if (!editingTxn) return
+    const existingSum = splits.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
+    const remaining = editingTxn.amount - existingSum
+    setSplits([...splits, { category_id: "", amount: remaining.toFixed(2), description: "" }])
+  }
+
+  const initSplit = () => {
+    if (!editingTxn) return
+    if (splits.length === 0) {
+      // Initialize with 2 rows: first with full amount, second empty
+      setSplits([
+        { category_id: editingTxn.category_id || "", amount: editingTxn.amount.toFixed(2), description: "" },
+        { category_id: "", amount: "0.00", description: "" },
+      ])
+    }
+    setEditTab("split")
   }
 
   const scanDuplicates = async () => {
@@ -531,6 +621,17 @@ export default function TransactionsPage() {
             >
               <Bookmark className="h-3.5 w-3.5" /> Create Alias
             </button>
+            <button
+              onClick={initSplit}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                editTab === "split"
+                  ? "border-blue-500 text-blue-400"
+                  : "border-transparent text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Split
+              {splits.length > 1 && <Badge variant="secondary" className="ml-1.5 text-xs">{splits.length}</Badge>}
+            </button>
           </div>
 
           {editTab === "edit" ? (
@@ -607,7 +708,7 @@ export default function TransactionsPage() {
                 </div>
               </div>
             </div>
-          ) : (
+          ) : editTab === "alias" ? (
             <div className="space-y-4">
               <div className="p-3 rounded-lg bg-zinc-800/50 text-xs text-zinc-400 space-y-1">
                 <p>Create a reusable alias so all transactions matching this pattern get automatically named and categorized.</p>
@@ -652,7 +753,69 @@ export default function TransactionsPage() {
                 </Button>
               </div>
             </div>
-          )}
+          ) : editTab === "split" ? (
+            <div className="space-y-3">
+              {editingTxn && (
+                <p className="text-xs text-zinc-500">
+                  Total: {formatCurrency(editingTxn.amount)} — Split across categories
+                </p>
+              )}
+              {splits.map((split, idx) => {
+                const splitSum = splits.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
+                return (
+                  <div key={idx} className="flex gap-2 items-end">
+                    <div className="flex-1">
+                      {idx === 0 && <label className="text-xs text-zinc-500 mb-0.5 block">Category</label>}
+                      <Select
+                        value={split.category_id}
+                        onChange={(e) => {
+                          const updated = [...splits]
+                          updated[idx] = { ...updated[idx], category_id: e.target.value }
+                          setSplits(updated)
+                        }}
+                      >
+                        <option value="">Select category</option>
+                        {categories.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                      </Select>
+                    </div>
+                    <div className="w-28">
+                      {idx === 0 && <label className="text-xs text-zinc-500 mb-0.5 block">Amount</label>}
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={split.amount}
+                        onChange={(e) => {
+                          const updated = [...splits]
+                          updated[idx] = { ...updated[idx], amount: e.target.value }
+                          setSplits(updated)
+                        }}
+                      />
+                    </div>
+                    {splits.length > 2 && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 text-red-400 shrink-0"
+                        onClick={() => setSplits(splits.filter((_, i) => i !== idx))}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                )
+              })}
+              {editingTxn && (
+                <SplitActions
+                  splits={splits}
+                  txnAmount={editingTxn.amount}
+                  onAddRow={addSplitRow}
+                  onRemoveSplit={() => { setSplits([]); saveSplits() }}
+                  onCancel={() => { setEditingId(null); setEditingTxn(null) }}
+                  onSave={saveSplits}
+                />
+              )}
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
 
