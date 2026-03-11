@@ -57,8 +57,7 @@ function setupTestDb() {
 }
 
 // Mirrors the optimized dashboard query logic
-function runDashboardQueries(db: Database.Database) {
-  const now = new Date()
+function runDashboardQueries(db: Database.Database, now = new Date()) {
   const thisMonthStart = format(startOfMonth(now), 'yyyy-MM-dd')
   const thisMonthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
   const lastMonth = subMonths(now, 1)
@@ -119,7 +118,8 @@ describe('dashboard optimized queries', () => {
   })
 
   it('returns zeros when no transactions exist', () => {
-    const { monthlySummary, cashFlowByMonth } = runDashboardQueries(db)
+    const mid = setDate(new Date(), 15)
+    const { monthlySummary, cashFlowByMonth } = runDashboardQueries(db, mid)
 
     expect(monthlySummary.monthly_spending).toBe(0)
     expect(monthlySummary.last_month_spending).toBe(0)
@@ -132,37 +132,35 @@ describe('dashboard optimized queries', () => {
   })
 
   it('correctly calculates this month spending and income', () => {
-    const now = new Date()
-    const thisMonth = format(setDate(now, 15), 'yyyy-MM-dd')
+    const mid = setDate(new Date(), 15)
+    const thisMonth = format(mid, 'yyyy-MM-dd')
 
     db.prepare(`INSERT INTO transactions (id, account_id, date, amount, raw_description, category_id) VALUES (?, 'acc-1', ?, ?, 'Grocery Store', 'cat-food')`).run('t1', thisMonth, -50.25)
     db.prepare(`INSERT INTO transactions (id, account_id, date, amount, raw_description, category_id) VALUES (?, 'acc-1', ?, ?, 'Restaurant', 'cat-food')`).run('t2', thisMonth, -30.00)
     db.prepare(`INSERT INTO transactions (id, account_id, date, amount, raw_description, category_id) VALUES (?, 'acc-1', ?, ?, 'Paycheck', 'cat-income')`).run('t3', thisMonth, 3000.00)
 
-    const { monthlySummary } = runDashboardQueries(db)
+    const { monthlySummary } = runDashboardQueries(db, mid)
 
     expect(monthlySummary.monthly_spending).toBeCloseTo(80.25, 2)
     expect(monthlySummary.monthly_income).toBeCloseTo(3000.00, 2)
   })
 
   it('correctly calculates last month spending separately', () => {
-    const now = new Date()
-    const mid = setDate(now, 15)
+    const mid = setDate(new Date(), 15)
     const thisMonth = format(mid, 'yyyy-MM-dd')
     const lastMonth = format(subMonths(mid, 1), 'yyyy-MM-dd')
 
     db.prepare(`INSERT INTO transactions (id, account_id, date, amount, raw_description) VALUES (?, 'acc-1', ?, ?, 'This month expense')`).run('t1', thisMonth, -100)
     db.prepare(`INSERT INTO transactions (id, account_id, date, amount, raw_description) VALUES (?, 'acc-1', ?, ?, 'Last month expense')`).run('t2', lastMonth, -200)
 
-    const { monthlySummary } = runDashboardQueries(db)
+    const { monthlySummary } = runDashboardQueries(db, mid)
 
     expect(monthlySummary.monthly_spending).toBeCloseTo(100, 2)
     expect(monthlySummary.last_month_spending).toBeCloseTo(200, 2)
   })
 
   it('groups cash flow by month correctly', () => {
-    const now = new Date()
-    const mid = setDate(now, 15)
+    const mid = setDate(new Date(), 15)
     const thisMonthLabel = format(mid, 'yyyy-MM')
     const lastMonthLabel = format(subMonths(mid, 1), 'yyyy-MM')
     const thisMonth = format(mid, 'yyyy-MM-dd')
@@ -173,7 +171,7 @@ describe('dashboard optimized queries', () => {
     db.prepare(`INSERT INTO transactions (id, account_id, date, amount, raw_description) VALUES (?, 'acc-1', ?, ?, 'Old income')`).run('t3', lastMonth, 4000)
     db.prepare(`INSERT INTO transactions (id, account_id, date, amount, raw_description) VALUES (?, 'acc-1', ?, ?, 'Old expense')`).run('t4', lastMonth, -800)
 
-    const { cashFlowByMonth } = runDashboardQueries(db)
+    const { cashFlowByMonth } = runDashboardQueries(db, mid)
 
     const thisMonthRow = cashFlowByMonth.find(r => r.month === thisMonthLabel)!
     expect(thisMonthRow.income).toBeCloseTo(5000, 2)
@@ -185,13 +183,13 @@ describe('dashboard optimized queries', () => {
   })
 
   it('fills zero for months with no transactions in cash flow', () => {
-    const now = new Date()
-    const thisMonth = format(setDate(now, 15), 'yyyy-MM-dd')
+    const mid = setDate(new Date(), 15)
+    const thisMonth = format(mid, 'yyyy-MM-dd')
 
     // Only add a transaction for this month
     db.prepare(`INSERT INTO transactions (id, account_id, date, amount, raw_description) VALUES (?, 'acc-1', ?, ?, 'Income')`).run('t1', thisMonth, 1000)
 
-    const { cashFlowByMonth } = runDashboardQueries(db)
+    const { cashFlowByMonth } = runDashboardQueries(db, mid)
 
     expect(cashFlowByMonth).toHaveLength(6)
     // Months without transactions should have zero income and expenses
@@ -200,12 +198,12 @@ describe('dashboard optimized queries', () => {
   })
 
   it('ignores transactions outside the 6-month window', () => {
-    const now = new Date()
-    const oldDate = format(subMonths(now, 7), 'yyyy-MM-dd')
+    const mid = setDate(new Date(), 15)
+    const oldDate = format(subMonths(mid, 7), 'yyyy-MM-dd')
 
     db.prepare(`INSERT INTO transactions (id, account_id, date, amount, raw_description) VALUES (?, 'acc-1', ?, ?, 'Old transaction')`).run('t1', oldDate, -500)
 
-    const { monthlySummary, cashFlowByMonth } = runDashboardQueries(db)
+    const { monthlySummary, cashFlowByMonth } = runDashboardQueries(db, mid)
 
     expect(monthlySummary.monthly_spending).toBe(0)
     for (const month of cashFlowByMonth) {
