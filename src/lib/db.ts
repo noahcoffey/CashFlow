@@ -51,7 +51,7 @@ export function runIntegrityCheck(): string[] {
   return results.map(r => r.integrity_check)
 }
 
-function initializeSchema(db: Database.Database) {
+export function initializeSchema(db: Database.Database) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS accounts (
       id TEXT PRIMARY KEY,
