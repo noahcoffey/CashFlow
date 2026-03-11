@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import { useDebounce } from "@/hooks/use-debounce"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -91,6 +92,7 @@ export default function TransactionsPage() {
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
+  const debouncedSearch = useDebounce(search, 300)
   const [accountFilter, setAccountFilter] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("")
   const [dateFrom, setDateFrom] = useState("")
@@ -128,7 +130,7 @@ export default function TransactionsPage() {
   const fetchTransactions = useCallback(() => {
     setLoading(true)
     const params = new URLSearchParams({ page: String(page), limit: String(limit) })
-    if (search) params.set("search", search)
+    if (debouncedSearch) params.set("search", debouncedSearch)
     if (accountFilter) params.set("accountId", accountFilter)
     if (categoryFilter) params.set("categoryId", categoryFilter)
     if (dateFrom) params.set("startDate", dateFrom)
@@ -142,7 +144,7 @@ export default function TransactionsPage() {
         setTotal(data.total || 0)
       })
       .finally(() => setLoading(false))
-  }, [page, search, accountFilter, categoryFilter, dateFrom, dateTo, tagFilter])
+  }, [page, debouncedSearch, accountFilter, categoryFilter, dateFrom, dateTo, tagFilter])
 
   useEffect(() => {
     fetchTransactions()
