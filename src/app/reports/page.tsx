@@ -14,12 +14,13 @@ import {
 } from "recharts"
 import { Badge } from "@/components/ui/badge"
 import { ChartErrorBoundary } from "@/components/chart-error-boundary"
+import type { ReportResponse, IncomeVsExpensesMonth, YearOverYearData } from "@/lib/types"
 
 type ReportType = "spending-by-category" | "monthly-trends" | "income-vs-expenses" | "net-worth" | "year-over-year"
 
 export default function ReportsPage() {
   const [reportType, setReportType] = useState<ReportType>("spending-by-category")
-  const [rawData, setRawData] = useState<any>(null)
+  const [rawData, setRawData] = useState<ReportResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
@@ -36,10 +37,10 @@ export default function ReportsPage() {
   }, [reportType, startDate, endDate])
 
   const exportCSV = () => {
-    if (!rawData?.data?.length) return
-    const rows = rawData.data
+    if (!rawData || !('data' in rawData) || !rawData.data?.length) return
+    const rows = rawData.data as Record<string, unknown>[]
     const keys = Object.keys(rows[0] || {})
-    const csv = [keys.join(","), ...rows.map((r: any) => keys.map((k) => JSON.stringify(r[k] ?? "")).join(","))].join("\n")
+    const csv = [keys.join(","), ...rows.map((r) => keys.map((k) => JSON.stringify(r[k] ?? "")).join(","))].join("\n")
     const blob = new Blob([csv], { type: "text/csv" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -51,18 +52,19 @@ export default function ReportsPage() {
 
   const COLORS = ["#EF4444", "#3B82F6", "#22C55E", "#F59E0B", "#8B5CF6", "#EC4899", "#14B8A6", "#F97316", "#6366F1", "#06B6D4"]
 
-  const hasData = rawData?.data?.length > 0
+  const hasData = rawData && 'data' in rawData && Array.isArray(rawData.data) && rawData.data.length > 0
 
   // Transform monthly-trends data into flat rows for Recharts
   const getTrendData = () => {
-    if (!rawData?.data) return { rows: [], categories: [] as string[] }
+    if (!rawData || !('data' in rawData)) return { rows: [] as Record<string, string | number>[], categories: [] as string[] }
+    const data = rawData.data as Array<{ month: string; categories?: Array<{ name: string; total: number }> }>
     const catSet = new Set<string>()
-    rawData.data.forEach((m: any) => m.categories?.forEach((c: any) => catSet.add(c.name)))
+    data.forEach((m) => m.categories?.forEach((c) => catSet.add(c.name)))
     const categories = Array.from(catSet)
-    const rows = rawData.data.map((m: any) => {
-      const row: any = { month: m.month }
+    const rows = data.map((m) => {
+      const row: Record<string, string | number> = { month: m.month }
       categories.forEach(c => { row[c] = 0 })
-      m.categories?.forEach((c: any) => { row[c.name] = c.total })
+      m.categories?.forEach((c) => { row[c.name] = c.total })
       return row
     })
     return { rows, categories }
@@ -70,8 +72,9 @@ export default function ReportsPage() {
 
   // Transform net-worth data
   const getNetWorthData = () => {
-    if (!rawData?.data) return []
-    return rawData.data.map((m: any) => ({ month: m.month, ...m.balances, total: m.total }))
+    if (!rawData || !('data' in rawData)) return []
+    const data = rawData.data as Array<{ month: string; balances: Record<string, number>; total: number }>
+    return data.map((m) => ({ month: m.month, ...m.balances, total: m.total }))
   }
 
   return (
@@ -127,12 +130,12 @@ export default function ReportsPage() {
                     <ResponsiveContainer width="100%" height={350}>
                       <PieChart>
                         <Pie
-                          data={rawData.data.map((r: any) => ({ name: r.name, value: Math.abs(r.total) }))}
+                          data={(rawData!.data as Array<{ name: string; total: number }>).map((r) => ({ name: r.name, value: Math.abs(r.total) }))}
                           cx="50%" cy="50%" innerRadius={60} outerRadius={130}
                           dataKey="value" stroke="none"
-                          label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`}
                         >
-                          {rawData.data.map((r: any, i: number) => (
+                          {(rawData!.data as Array<{ color?: string }>).map((r, i: number) => (
                             <Cell key={i} fill={r.color || COLORS[i % COLORS.length]} />
                           ))}
                         </Pie>
@@ -143,7 +146,7 @@ export default function ReportsPage() {
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="space-y-2">
-                      {rawData.data.map((r: any, i: number) => (
+                      {(rawData!.data as Array<{ name: string; icon: string; color: string; total: number; transaction_count: number }>).map((r, i: number) => (
                         <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-zinc-800/30">
                           <div className="flex items-center gap-2">
                             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: r.color || COLORS[i % COLORS.length] }} />
@@ -179,7 +182,7 @@ export default function ReportsPage() {
 
                 {reportType === "income-vs-expenses" && (
                   <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={rawData.data}>
+                    <BarChart data={rawData.data as IncomeVsExpensesMonth[]}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                       <XAxis dataKey="month" stroke="#71717a" fontSize={12} />
                       <YAxis stroke="#71717a" fontSize={12} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
@@ -205,7 +208,7 @@ export default function ReportsPage() {
                         formatter={(value) => formatCurrency(Number(value))}
                       />
                       <Legend />
-                      {rawData.accounts?.map((acc: string, i: number) => (
+                      {(rawData && 'accounts' in rawData ? (rawData as { accounts: string[] }).accounts : []).map((acc: string, i: number) => (
                         <Line key={acc} type="monotone" dataKey={acc} stroke={COLORS[i % COLORS.length]} strokeWidth={2} />
                       ))}
                       <Line type="monotone" dataKey="total" stroke="#fafafa" strokeWidth={2} strokeDasharray="5 5" />
@@ -214,9 +217,10 @@ export default function ReportsPage() {
                 )}
 
                 {reportType === "year-over-year" && (() => {
-                  const years: string[] = rawData.years || []
-                  const yearTotals: { year: string; expenses: number; income: number }[] = rawData.yearTotals || []
-                  const categoryByYear: { year: string; categories: { name: string; color: string; icon: string; total: number }[] }[] = rawData.categoryByYear || []
+                  const yoyData = rawData as YearOverYearData
+                  const years = yoyData.years
+                  const yearTotals = yoyData.yearTotals
+                  const categoryByYear = yoyData.categoryByYear
 
                   return (
                     <div className="space-y-8">
@@ -242,7 +246,7 @@ export default function ReportsPage() {
 
                       {/* Monthly comparison chart */}
                       <ResponsiveContainer width="100%" height={400}>
-                        <BarChart data={rawData.data}>
+                        <BarChart data={(rawData as YearOverYearData).data}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                           <XAxis dataKey="month" stroke="#71717a" fontSize={12} />
                           <YAxis stroke="#71717a" fontSize={12} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
