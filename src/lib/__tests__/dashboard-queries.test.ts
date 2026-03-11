@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
-import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns'
+import { format, startOfMonth, endOfMonth, subMonths, setDate } from 'date-fns'
 
 function setupTestDb() {
   const db = new Database(':memory:')
@@ -112,6 +112,12 @@ describe('dashboard optimized queries', () => {
     db = setupTestDb()
   })
 
+  afterEach(() => {
+    if (db) {
+      db.close()
+    }
+  })
+
   it('returns zeros when no transactions exist', () => {
     const { monthlySummary, cashFlowByMonth } = runDashboardQueries(db)
 
@@ -127,7 +133,7 @@ describe('dashboard optimized queries', () => {
 
   it('correctly calculates this month spending and income', () => {
     const now = new Date()
-    const thisMonth = format(now, 'yyyy-MM-dd')
+    const thisMonth = format(setDate(now, 15), 'yyyy-MM-dd')
 
     db.prepare(`INSERT INTO transactions (id, account_id, date, amount, raw_description, category_id) VALUES (?, 'acc-1', ?, ?, 'Grocery Store', 'cat-food')`).run('t1', thisMonth, -50.25)
     db.prepare(`INSERT INTO transactions (id, account_id, date, amount, raw_description, category_id) VALUES (?, 'acc-1', ?, ?, 'Restaurant', 'cat-food')`).run('t2', thisMonth, -30.00)
@@ -141,8 +147,9 @@ describe('dashboard optimized queries', () => {
 
   it('correctly calculates last month spending separately', () => {
     const now = new Date()
-    const thisMonth = format(now, 'yyyy-MM-dd')
-    const lastMonth = format(subMonths(now, 1), 'yyyy-MM-dd')
+    const mid = setDate(now, 15)
+    const thisMonth = format(mid, 'yyyy-MM-dd')
+    const lastMonth = format(subMonths(mid, 1), 'yyyy-MM-dd')
 
     db.prepare(`INSERT INTO transactions (id, account_id, date, amount, raw_description) VALUES (?, 'acc-1', ?, ?, 'This month expense')`).run('t1', thisMonth, -100)
     db.prepare(`INSERT INTO transactions (id, account_id, date, amount, raw_description) VALUES (?, 'acc-1', ?, ?, 'Last month expense')`).run('t2', lastMonth, -200)
@@ -155,10 +162,11 @@ describe('dashboard optimized queries', () => {
 
   it('groups cash flow by month correctly', () => {
     const now = new Date()
-    const thisMonthLabel = format(now, 'yyyy-MM')
-    const lastMonthLabel = format(subMonths(now, 1), 'yyyy-MM')
-    const thisMonth = format(now, 'yyyy-MM-dd')
-    const lastMonth = format(subMonths(now, 1), 'yyyy-MM-dd')
+    const mid = setDate(now, 15)
+    const thisMonthLabel = format(mid, 'yyyy-MM')
+    const lastMonthLabel = format(subMonths(mid, 1), 'yyyy-MM')
+    const thisMonth = format(mid, 'yyyy-MM-dd')
+    const lastMonth = format(subMonths(mid, 1), 'yyyy-MM-dd')
 
     db.prepare(`INSERT INTO transactions (id, account_id, date, amount, raw_description) VALUES (?, 'acc-1', ?, ?, 'Income')`).run('t1', thisMonth, 5000)
     db.prepare(`INSERT INTO transactions (id, account_id, date, amount, raw_description) VALUES (?, 'acc-1', ?, ?, 'Expense')`).run('t2', thisMonth, -1500)
@@ -178,7 +186,7 @@ describe('dashboard optimized queries', () => {
 
   it('fills zero for months with no transactions in cash flow', () => {
     const now = new Date()
-    const thisMonth = format(now, 'yyyy-MM-dd')
+    const thisMonth = format(setDate(now, 15), 'yyyy-MM-dd')
 
     // Only add a transaction for this month
     db.prepare(`INSERT INTO transactions (id, account_id, date, amount, raw_description) VALUES (?, 'acc-1', ?, ?, 'Income')`).run('t1', thisMonth, 1000)
