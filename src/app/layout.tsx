@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import "./globals.css"
 import { Sidebar } from "@/components/sidebar"
 import { ToastProvider } from "@/components/toast-provider"
+import { ErrorBoundary } from "@/components/error-boundary"
 
 export const metadata: Metadata = {
   title: "CashFlow - Personal Finance",
@@ -15,7 +16,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Sidebar />
         <main className="md:ml-64 min-h-screen">
           <div className="p-6 md:p-8 max-w-7xl mx-auto">
-            {children}
+            <ErrorBoundary>
+              {children}
+            </ErrorBoundary>
           </div>
         </main>
         <ToastProvider />

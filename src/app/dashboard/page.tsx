@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
+import { ChartErrorBoundary } from "@/components/chart-error-boundary"
 import {
   BarChart,
   Bar,
@@ -185,20 +186,22 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             {data.cashFlowByMonth.length > 0 ? (
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={data.cashFlowByMonth}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis dataKey="month" stroke="#71717a" fontSize={12} />
-                  <YAxis stroke="#71717a" fontSize={12} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
-                  <Tooltip
-                    contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px' }}
-                    labelStyle={{ color: '#a1a1aa' }}
-                    formatter={(value) => formatCurrency(Number(value))}
-                  />
-                  <Bar dataKey="income" fill="#22c55e" radius={[4, 4, 0, 0]} name="Income" />
-                  <Bar dataKey="expenses" fill="#ef4444" radius={[4, 4, 0, 0]} name="Expenses" />
-                </BarChart>
-              </ResponsiveContainer>
+              <ChartErrorBoundary>
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={data.cashFlowByMonth}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                    <XAxis dataKey="month" stroke="#71717a" fontSize={12} />
+                    <YAxis stroke="#71717a" fontSize={12} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
+                    <Tooltip
+                      contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px' }}
+                      labelStyle={{ color: '#a1a1aa' }}
+                      formatter={(value) => formatCurrency(Number(value))}
+                    />
+                    <Bar dataKey="income" fill="#22c55e" radius={[4, 4, 0, 0]} name="Income" />
+                    <Bar dataKey="expenses" fill="#ef4444" radius={[4, 4, 0, 0]} name="Expenses" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartErrorBoundary>
             ) : (
               <div className="h-[280px] flex items-center justify-center text-zinc-500">
                 No data yet
@@ -215,27 +218,29 @@ export default function DashboardPage() {
           <CardContent>
             {data.topCategories.length > 0 ? (
               <div className="space-y-2">
-                <ResponsiveContainer width="100%" height={160}>
-                  <PieChart>
-                    <Pie
-                      data={data.topCategories.map(c => ({ name: c.name, value: Math.abs(c.total) }))}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={40}
-                      outerRadius={70}
-                      dataKey="value"
-                      stroke="none"
-                    >
-                      {data.topCategories.map((c, i) => (
-                        <Cell key={i} fill={c.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px' }}
-                      formatter={(value) => formatCurrency(Number(value))}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                <ChartErrorBoundary>
+                  <ResponsiveContainer width="100%" height={160}>
+                    <PieChart>
+                      <Pie
+                        data={data.topCategories.map(c => ({ name: c.name, value: Math.abs(c.total) }))}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={40}
+                        outerRadius={70}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        {data.topCategories.map((c, i) => (
+                          <Cell key={i} fill={c.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px' }}
+                        formatter={(value) => formatCurrency(Number(value))}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </ChartErrorBoundary>
                 <div className="space-y-2 mt-2">
                   {data.topCategories.map((cat, i) => (
                     <div key={i} className="flex items-center justify-between text-sm">
