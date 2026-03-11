@@ -11,27 +11,23 @@ export async function GET() {
     const lastMonth = subMonths(now, 1)
     const lastMonthStart = format(startOfMonth(lastMonth), 'yyyy-MM-dd')
     const lastMonthEnd = format(endOfMonth(lastMonth), 'yyyy-MM-dd')
+    const sixMonthsAgoStart = format(startOfMonth(subMonths(now, 5)), 'yyyy-MM-dd')
 
-    // Monthly spending (expenses this month)
-    const monthlySpendingResult = db.prepare(
-      `SELECT COALESCE(SUM(ABS(amount)), 0) as total
+    // Combined monthly summary: this month spending, last month spending, this month income
+    // Replaces 3 separate queries with 1 using conditional aggregation
+    const monthlySummary = db.prepare(
+      `SELECT
+         COALESCE(SUM(CASE WHEN date >= ? AND date <= ? AND amount < 0 THEN ABS(amount) END), 0) as monthly_spending,
+         COALESCE(SUM(CASE WHEN date >= ? AND date <= ? AND amount < 0 THEN ABS(amount) END), 0) as last_month_spending,
+         COALESCE(SUM(CASE WHEN date >= ? AND date <= ? AND amount > 0 THEN amount END), 0) as monthly_income
        FROM transactions
-       WHERE date >= ? AND date <= ? AND amount < 0`
-    ).get(thisMonthStart, thisMonthEnd) as { total: number }
-
-    // Last month spending
-    const lastMonthSpendingResult = db.prepare(
-      `SELECT COALESCE(SUM(ABS(amount)), 0) as total
-       FROM transactions
-       WHERE date >= ? AND date <= ? AND amount < 0`
-    ).get(lastMonthStart, lastMonthEnd) as { total: number }
-
-    // Monthly income
-    const monthlyIncomeResult = db.prepare(
-      `SELECT COALESCE(SUM(amount), 0) as total
-       FROM transactions
-       WHERE date >= ? AND date <= ? AND amount > 0`
-    ).get(thisMonthStart, thisMonthEnd) as { total: number }
+       WHERE date >= ? AND date <= ?`
+    ).get(
+      thisMonthStart, thisMonthEnd,
+      lastMonthStart, lastMonthEnd,
+      thisMonthStart, thisMonthEnd,
+      lastMonthStart, thisMonthEnd
+    ) as { monthly_spending: number; last_month_spending: number; monthly_income: number }
 
     // Top 5 spending categories this month
     const topCategories = db.prepare(
@@ -66,30 +62,27 @@ export async function GET() {
        ORDER BY a.name`
     ).all()
 
-    // Cash flow by month (last 6 months)
+    // Cash flow by month (last 6 months) — single query replaces 12 separate queries
+    const cashFlowRows = db.prepare(
+      `SELECT strftime('%Y-%m', date) as month,
+              COALESCE(SUM(CASE WHEN amount > 0 THEN amount END), 0) as income,
+              COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) END), 0) as expenses
+       FROM transactions
+       WHERE date >= ? AND date <= ?
+       GROUP BY strftime('%Y-%m', date)
+       ORDER BY month`
+    ).all(sixMonthsAgoStart, thisMonthEnd) as Array<{ month: string; income: number; expenses: number }>
+
+    // Build the full 6-month array, filling in zeros for months with no transactions
+    const cashFlowMap = new Map(cashFlowRows.map(r => [r.month, r]))
     const cashFlowByMonth = []
     for (let i = 5; i >= 0; i--) {
-      const month = subMonths(now, i)
-      const mStart = format(startOfMonth(month), 'yyyy-MM-dd')
-      const mEnd = format(endOfMonth(month), 'yyyy-MM-dd')
-      const label = format(month, 'yyyy-MM')
-
-      const income = db.prepare(
-        `SELECT COALESCE(SUM(amount), 0) as total
-         FROM transactions
-         WHERE date >= ? AND date <= ? AND amount > 0`
-      ).get(mStart, mEnd) as { total: number }
-
-      const expenses = db.prepare(
-        `SELECT COALESCE(SUM(ABS(amount)), 0) as total
-         FROM transactions
-         WHERE date >= ? AND date <= ? AND amount < 0`
-      ).get(mStart, mEnd) as { total: number }
-
+      const label = format(subMonths(now, i), 'yyyy-MM')
+      const row = cashFlowMap.get(label)
       cashFlowByMonth.push({
         month: label,
-        income: income.total,
-        expenses: expenses.total,
+        income: row?.income ?? 0,
+        expenses: row?.expenses ?? 0,
       })
     }
 
@@ -111,9 +104,9 @@ export async function GET() {
     ).all(thisMonthStart, thisMonthEnd)
 
     return NextResponse.json({
-      monthlySpending: monthlySpendingResult.total,
-      lastMonthSpending: lastMonthSpendingResult.total,
-      monthlyIncome: monthlyIncomeResult.total,
+      monthlySpending: monthlySummary.monthly_spending,
+      lastMonthSpending: monthlySummary.last_month_spending,
+      monthlyIncome: monthlySummary.monthly_income,
       topCategories,
       recentTransactions,
       accountBalances,
