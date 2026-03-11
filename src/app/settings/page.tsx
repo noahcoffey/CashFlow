@@ -392,11 +392,11 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary" className="capitalize">{acc.type}</Badge>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => editAccount(acc)}>
-                      <Edit2 className="h-3 w-3" />
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => editAccount(acc)} aria-label={`Edit ${acc.name}`}>
+                      <Edit2 className="h-3 w-3" aria-hidden="true" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400" onClick={() => setDeletingAccount(acc)}>
-                      <Trash2 className="h-3 w-3" />
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400" onClick={() => setDeletingAccount(acc)} aria-label={`Delete ${acc.name}`}>
+                      <Trash2 className="h-3 w-3" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
@@ -446,11 +446,11 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex items-center gap-3 ml-4">
                     <span className="text-xs text-zinc-600">{alias.match_count} matches</span>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => editAlias(alias)}>
-                      <Edit2 className="h-3 w-3" />
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => editAlias(alias)} aria-label={`Edit ${alias.display_name}`}>
+                      <Edit2 className="h-3 w-3" aria-hidden="true" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400" onClick={() => deleteAlias(alias.id)}>
-                      <Trash2 className="h-3 w-3" />
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400" onClick={() => deleteAlias(alias.id)} aria-label={`Delete ${alias.display_name}`}>
+                      <Trash2 className="h-3 w-3" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
@@ -488,16 +488,18 @@ export default function SettingsPage() {
                     size="icon"
                     className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
                     onClick={() => { setTagForm({ id: tag.id, name: tag.name, color: tag.color }); setShowTagDialog(true) }}
+                    aria-label={`Edit ${tag.name}`}
                   >
-                    <Edit2 className="h-2.5 w-2.5" />
+                    <Edit2 className="h-2.5 w-2.5" aria-hidden="true" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-5 w-5 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
                     onClick={() => deleteTag(tag.id)}
+                    aria-label={`Delete ${tag.name}`}
                   >
-                    <Trash2 className="h-2.5 w-2.5" />
+                    <Trash2 className="h-2.5 w-2.5" aria-hidden="true" />
                   </Button>
                 </div>
               ))}
@@ -561,14 +563,14 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex items-center gap-2 ml-4">
                     <span className="text-xs text-zinc-600">{rule.match_count} matches</span>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toggleRule(rule)}>
-                      {rule.is_active ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toggleRule(rule)} aria-label={rule.is_active ? `Disable ${rule.name}` : `Enable ${rule.name}`}>
+                      {rule.is_active ? <Pause className="h-3 w-3" aria-hidden="true" /> : <Play className="h-3 w-3" aria-hidden="true" />}
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => editRule(rule)}>
-                      <Edit2 className="h-3 w-3" />
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => editRule(rule)} aria-label={`Edit ${rule.name}`}>
+                      <Edit2 className="h-3 w-3" aria-hidden="true" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400" onClick={() => deleteRule(rule.id)}>
-                      <Trash2 className="h-3 w-3" />
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400" onClick={() => deleteRule(rule.id)} aria-label={`Delete ${rule.name}`}>
+                      <Trash2 className="h-3 w-3" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
@@ -862,8 +864,9 @@ export default function SettingsPage() {
                     )}
                     {ruleConditions.length > 1 && (
                       <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 text-red-400"
-                        onClick={() => setRuleConditions(ruleConditions.filter((_, j) => j !== i))}>
-                        <Trash2 className="h-3 w-3" />
+                        onClick={() => setRuleConditions(ruleConditions.filter((_, j) => j !== i))}
+                        aria-label={`Remove condition ${i + 1}`}>
+                        <Trash2 className="h-3 w-3" aria-hidden="true" />
                       </Button>
                     )}
                   </div>
@@ -936,8 +939,9 @@ export default function SettingsPage() {
                     )}
                     {ruleActions.length > 1 && (
                       <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 text-red-400"
-                        onClick={() => setRuleActions(ruleActions.filter((_, j) => j !== i))}>
-                        <Trash2 className="h-3 w-3" />
+                        onClick={() => setRuleActions(ruleActions.filter((_, j) => j !== i))}
+                        aria-label={`Remove action ${i + 1}`}>
+                        <Trash2 className="h-3 w-3" aria-hidden="true" />
                       </Button>
                     )}
                   </div>
