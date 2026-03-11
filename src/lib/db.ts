@@ -51,7 +51,7 @@ export function runIntegrityCheck(): string[] {
   return results.map(r => r.integrity_check)
 }
 
-function initializeSchema(db: Database.Database) {
+export function initializeSchema(db: Database.Database) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS accounts (
       id TEXT PRIMARY KEY,
@@ -174,8 +174,13 @@ function initializeSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_transactions_account ON transactions(account_id);
     CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
     CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category_id);
+    CREATE INDEX IF NOT EXISTS idx_transactions_account_date ON transactions(account_id, date);
+    CREATE INDEX IF NOT EXISTS idx_transactions_date_amount ON transactions(date, amount);
+    CREATE INDEX IF NOT EXISTS idx_transactions_reconciled ON transactions(is_reconciled);
     CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id);
     CREATE INDEX IF NOT EXISTS idx_merchant_aliases_pattern ON merchant_aliases(raw_pattern);
+    CREATE INDEX IF NOT EXISTS idx_scheduled_bills_next_due ON scheduled_bills(next_due_date);
+    CREATE INDEX IF NOT EXISTS idx_scheduled_bills_active ON scheduled_bills(is_active, next_due_date);
   `)
 
   // Seed default categories if empty
