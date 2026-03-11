@@ -11,8 +11,44 @@ export function getDb(): Database.Database {
     db.pragma('journal_mode = WAL')
     db.pragma('foreign_keys = ON')
     initializeSchema(db)
+    // Checkpoint WAL on startup to keep WAL file size bounded
+    db.pragma('wal_checkpoint(RESTART)')
+    // Run integrity check on startup and log any issues
+    const integrityResult = db.pragma('integrity_check') as Array<{ integrity_check: string }>
+    if (integrityResult.length > 0 && integrityResult[0].integrity_check !== 'ok') {
+      console.error('Database integrity check failed:', integrityResult)
+    }
   }
   return db
+}
+
+export function getDbPath(): string {
+  return DB_PATH
+}
+
+export function closeDb(): void {
+  if (db) {
+    db.close()
+    db = null
+  }
+}
+
+export function runCheckpoint(): { walPages: number; checkpointed: number } {
+  const db = getDb()
+  const result = db.pragma('wal_checkpoint(RESTART)') as Array<{ busy: number; log: number; checkpointed: number }>
+  const row = result[0] || { log: 0, checkpointed: 0 }
+  return { walPages: row.log, checkpointed: row.checkpointed }
+}
+
+export function runVacuum(): void {
+  const db = getDb()
+  db.exec('VACUUM')
+}
+
+export function runIntegrityCheck(): string[] {
+  const db = getDb()
+  const results = db.pragma('integrity_check') as Array<{ integrity_check: string }>
+  return results.map(r => r.integrity_check)
 }
 
 function initializeSchema(db: Database.Database) {

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { formatDate } from "@/lib/utils"
-import { Plus, Trash2, Edit2, Building2, Tag, RefreshCw, Tags, Zap, Play, Pause, Sparkles, Check, X, Loader2 } from "lucide-react"
+import { Plus, Trash2, Edit2, Building2, Tag, RefreshCw, Tags, Zap, Play, Pause, Sparkles, Check, X, Loader2, Download, Upload, HardDrive, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 
 interface Account {
@@ -78,6 +78,10 @@ export default function SettingsPage() {
   const [ruleActions, setRuleActions] = useState<RuleAction[]>([{ type: 'set_category', value: '' }])
   const [ruleApplyRetro, setRuleApplyRetro] = useState(true)
   const [applyingRules, setApplyingRules] = useState(false)
+  const [optimizing, setOptimizing] = useState(false)
+  const [dbHealthy, setDbHealthy] = useState<boolean | null>(null)
+  const [checkingHealth, setCheckingHealth] = useState(false)
+  const [restoring, setRestoring] = useState(false)
 
   const fetchData = () => {
     fetch("/api/accounts").then(r => r.json()).then(d => setAccounts(d.accounts || []))
@@ -343,6 +347,80 @@ export default function SettingsPage() {
     }
   }
 
+  const downloadBackup = async () => {
+    try {
+      const res = await fetch("/api/backup")
+      if (!res.ok) throw new Error("Backup failed")
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      const disposition = res.headers.get("Content-Disposition") || ""
+      const match = disposition.match(/filename="(.+)"/)
+      a.download = match ? match[1] : "cashflow-backup.db"
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success("Backup downloaded")
+    } catch {
+      toast.error("Failed to create backup")
+    }
+  }
+
+  const restoreBackup = async (file: File) => {
+    setRestoring(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const res = await fetch("/api/backup", { method: "POST", body: formData })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || "Failed to restore backup")
+        return
+      }
+      toast.success("Database restored. Refreshing...")
+      setTimeout(() => window.location.reload(), 1500)
+    } catch {
+      toast.error("Failed to restore backup")
+    } finally {
+      setRestoring(false)
+    }
+  }
+
+  const optimizeDatabase = async () => {
+    setOptimizing(true)
+    try {
+      const res = await fetch("/api/database", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "optimize" }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success("Database optimized")
+    } catch {
+      toast.error("Failed to optimize database")
+    } finally {
+      setOptimizing(false)
+    }
+  }
+
+  const checkDatabaseHealth = async () => {
+    setCheckingHealth(true)
+    try {
+      const res = await fetch("/api/database")
+      const data = await res.json()
+      setDbHealthy(data.healthy)
+      if (data.healthy) {
+        toast.success("Database integrity check passed")
+      } else {
+        toast.error("Database integrity issues detected")
+      }
+    } catch {
+      toast.error("Failed to check database health")
+    } finally {
+      setCheckingHealth(false)
+    }
+  }
+
   const operatorLabels: Record<string, string> = {
     contains: 'contains', starts_with: 'starts with', ends_with: 'ends with',
     equals: 'equals', regex: 'matches regex',
@@ -575,6 +653,66 @@ export default function SettingsPage() {
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Database Management */}
+      <Card>
+        <CardHeader>
+          <div>
+            <CardTitle className="flex items-center gap-2"><HardDrive className="h-5 w-5" /> Database Management</CardTitle>
+            <CardDescription>Backup, restore, and optimize your database</CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 rounded-lg bg-zinc-800/30 space-y-2">
+              <h3 className="text-sm font-medium text-zinc-200">Backup & Restore</h3>
+              <p className="text-xs text-zinc-500">Download a copy of your database or restore from a previous backup.</p>
+              <div className="flex gap-2 pt-1">
+                <Button variant="outline" size="sm" onClick={downloadBackup}>
+                  <Download className="h-4 w-4 mr-1" /> Export Backup
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={restoring}
+                  onClick={() => {
+                    const input = document.createElement("input")
+                    input.type = "file"
+                    input.accept = ".db"
+                    input.onchange = (e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0]
+                      if (file) restoreBackup(file)
+                    }
+                    input.click()
+                  }}
+                >
+                  {restoring ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+                  Restore Backup
+                </Button>
+              </div>
+            </div>
+            <div className="p-4 rounded-lg bg-zinc-800/30 space-y-2">
+              <h3 className="text-sm font-medium text-zinc-200">Maintenance</h3>
+              <p className="text-xs text-zinc-500">Optimize reclaims unused space. Health check verifies data integrity.</p>
+              <div className="flex gap-2 pt-1">
+                <Button variant="outline" size="sm" onClick={optimizeDatabase} disabled={optimizing}>
+                  {optimizing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+                  Optimize
+                </Button>
+                <Button variant="outline" size="sm" onClick={checkDatabaseHealth} disabled={checkingHealth}>
+                  {checkingHealth ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <ShieldCheck className="h-4 w-4 mr-1" />}
+                  Health Check
+                  {dbHealthy !== null && (
+                    <Badge variant={dbHealthy ? "success" : "destructive"} className="ml-2 text-xs">
+                      {dbHealthy ? "OK" : "Issues"}
+                    </Badge>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
