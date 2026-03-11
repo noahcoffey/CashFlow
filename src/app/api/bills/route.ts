@@ -24,26 +24,27 @@ export async function GET() {
       category_color: string | null; account_name: string | null
     }>
 
-    // Check which bills due this month have been paid
+    // Fetch all transactions this month in a single query for payment matching
+    const monthlyTransactions = db.prepare(
+      `SELECT id, amount, display_name, raw_description FROM transactions
+       WHERE date >= ? AND date <= ?`
+    ).all(monthStart, monthEnd) as Array<{
+      id: string; amount: number; display_name: string; raw_description: string
+    }>
+
+    const today = format(now, 'yyyy-MM-dd')
     const billsWithStatus = bills.map(bill => {
-      // Look for a matching transaction this month
-      const match = db.prepare(
-        `SELECT id FROM transactions
-         WHERE date >= ? AND date <= ?
-         AND ABS(amount - ?) < 1
-         AND (display_name LIKE ? OR raw_description LIKE ?)
-         LIMIT 1`
-      ).get(
-        monthStart, monthEnd,
-        bill.amount,
-        `%${bill.name}%`, `%${bill.name}%`
+      const match = monthlyTransactions.find(t =>
+        Math.abs(t.amount - bill.amount) < 1 &&
+        (t.display_name.toLowerCase().includes(bill.name.toLowerCase()) ||
+         t.raw_description.toLowerCase().includes(bill.name.toLowerCase()))
       )
 
       return {
         ...bill,
         isPaid: !!match,
         isDue: bill.next_due_date >= monthStart && bill.next_due_date <= monthEnd,
-        isOverdue: bill.next_due_date < format(now, 'yyyy-MM-dd'),
+        isOverdue: bill.next_due_date < today,
       }
     })
 
