@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import { Search, Filter, ChevronLeft, ChevronRight, Save, X, Tags, Trash2, Bookmark, Download, Copy } from "lucide-react"
+import { Search, Filter, ChevronLeft, ChevronRight, Save, X, Tags, Trash2, Bookmark, Download, Copy, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 
 interface Tag {
@@ -89,6 +89,7 @@ export default function TransactionsPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
@@ -137,12 +138,17 @@ export default function TransactionsPage() {
     if (dateTo) params.set("endDate", dateTo)
     if (tagFilter) params.set("tagId", tagFilter)
 
+    setError(null)
     fetch(`/api/transactions?${params}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Failed to load transactions (${r.status})`)
+        return r.json()
+      })
       .then((data) => {
         setTransactions(data.transactions || [])
         setTotal(data.total || 0)
       })
+      .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }, [page, debouncedSearch, accountFilter, categoryFilter, dateFrom, dateTo, tagFilter])
 
@@ -495,6 +501,13 @@ export default function TransactionsPage() {
           {loading ? (
             <div className="p-6 space-y-4">
               {[...Array(10)].map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" />)}
+            </div>
+          ) : error ? (
+            <div className="p-12 text-center">
+              <AlertCircle className="h-10 w-10 text-red-400 mx-auto mb-3" />
+              <p className="text-lg text-zinc-200">Failed to load transactions</p>
+              <p className="text-sm text-zinc-500 mt-1 mb-4">{error}</p>
+              <Button variant="outline" size="sm" onClick={fetchTransactions}>Try again</Button>
             </div>
           ) : transactions.length === 0 ? (
             <div className="p-12 text-center text-zinc-500">
