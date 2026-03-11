@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import { format, startOfMonth, endOfMonth, addDays, addWeeks, addMonths, addYears } from 'date-fns'
+import { matchBillPayments } from '@/lib/bill-matcher'
+import type { TransactionRecord } from '@/lib/bill-matcher'
 
 export async function GET() {
   try {
@@ -28,25 +30,10 @@ export async function GET() {
     const monthlyTransactions = db.prepare(
       `SELECT id, amount, display_name, raw_description FROM transactions
        WHERE date >= ? AND date <= ?`
-    ).all(monthStart, monthEnd) as Array<{
-      id: string; amount: number; display_name: string; raw_description: string
-    }>
+    ).all(monthStart, monthEnd) as TransactionRecord[]
 
     const today = format(now, 'yyyy-MM-dd')
-    const billsWithStatus = bills.map(bill => {
-      const match = monthlyTransactions.find(t =>
-        Math.abs(t.amount - bill.amount) < 1 &&
-        (t.display_name.toLowerCase().includes(bill.name.toLowerCase()) ||
-         t.raw_description.toLowerCase().includes(bill.name.toLowerCase()))
-      )
-
-      return {
-        ...bill,
-        isPaid: !!match,
-        isDue: bill.next_due_date >= monthStart && bill.next_due_date <= monthEnd,
-        isOverdue: bill.next_due_date < today,
-      }
-    })
+    const billsWithStatus = matchBillPayments(bills, monthlyTransactions, monthStart, monthEnd, today)
 
     const totalMonthly = bills.reduce((sum, b) => {
       const multiplier: Record<string, number> = {
