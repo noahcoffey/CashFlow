@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import { format, startOfMonth, endOfMonth, addDays, addWeeks, addMonths, addYears } from 'date-fns'
+import { createBillSchema, updateBillSchema, deleteBillSchema, validateBody } from '@/lib/validation'
 
 export async function GET() {
   try {
@@ -72,11 +73,12 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const db = getDb()
-    const { name, amount, frequency, next_due_date, category_id, account_id } = await request.json()
-
-    if (!name || amount === undefined || !frequency || !next_due_date) {
-      return NextResponse.json({ error: 'name, amount, frequency, and next_due_date are required' }, { status: 400 })
+    const body = await request.json()
+    const validation = validateBody(createBillSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
     }
+    const { name, amount, frequency, next_due_date, category_id, account_id } = validation.data
 
     const id = crypto.randomUUID()
     db.prepare(
@@ -95,11 +97,12 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const db = getDb()
-    const { id, name, amount, frequency, next_due_date, category_id, account_id, is_active } = await request.json()
-
-    if (!id) {
-      return NextResponse.json({ error: 'Bill id is required' }, { status: 400 })
+    const body = await request.json()
+    const validation = validateBody(updateBillSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
     }
+    const { id, name, amount, frequency, next_due_date, category_id, account_id, is_active } = validation.data
 
     db.prepare(
       `UPDATE scheduled_bills SET
@@ -127,13 +130,13 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const db = getDb()
-    const { id } = await request.json()
-
-    if (!id) {
-      return NextResponse.json({ error: 'Bill id is required' }, { status: 400 })
+    const body = await request.json()
+    const validation = validateBody(deleteBillSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
     }
 
-    db.prepare('DELETE FROM scheduled_bills WHERE id = ?').run(id)
+    db.prepare('DELETE FROM scheduled_bills WHERE id = ?').run(validation.data.id)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error deleting bill:', error)
