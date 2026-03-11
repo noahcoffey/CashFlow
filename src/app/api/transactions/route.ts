@@ -14,8 +14,15 @@ export async function GET(request: NextRequest) {
     const isReconciled = searchParams.get('isReconciled')
     const minAmount = searchParams.get('minAmount')
     const maxAmount = searchParams.get('maxAmount')
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '50')
+    const rawPage = parseInt(searchParams.get('page') || '1')
+    const rawLimit = parseInt(searchParams.get('limit') || '50')
+
+    if (isNaN(rawPage) || isNaN(rawLimit)) {
+      return NextResponse.json({ error: 'page and limit must be valid numbers' }, { status: 400 })
+    }
+
+    const page = Math.max(1, rawPage)
+    const limit = Math.min(Math.max(1, rawLimit), 500)
     const offset = (page - 1) * limit
 
     const conditions: string[] = []
