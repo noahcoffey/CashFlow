@@ -184,7 +184,7 @@ export default function TransactionsPage() {
       .then(r => r.json())
       .then(d => {
         if (d.splits?.length > 0) {
-          setSplits(d.splits.map((s: any) => ({
+          setSplits(d.splits.map((s: { category_id?: string; amount: number; description?: string }) => ({
             category_id: s.category_id || "",
             amount: String(s.amount),
             description: s.description || "",
