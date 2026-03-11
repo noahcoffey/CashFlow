@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { formatDate } from "@/lib/utils"
-import { Plus, Trash2, Edit2, Building2, Tag, RefreshCw, Tags, Zap, Play, Pause } from "lucide-react"
+import { Plus, Trash2, Edit2, Building2, Tag, RefreshCw, Tags, Zap, Play, Pause, Sparkles, Check, X, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
 interface Account {
@@ -52,12 +52,20 @@ export default function SettingsPage() {
   const [aliases, setAliases] = useState<Alias[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [showAccountDialog, setShowAccountDialog] = useState(false)
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null)
+  const [deletingAccount, setDeletingAccount] = useState<Account | null>(null)
   const [showAliasDialog, setShowAliasDialog] = useState(false)
   const [editingAliasId, setEditingAliasId] = useState<string | null>(null)
   const [accountForm, setAccountForm] = useState({ name: "", type: "checking", institution: "", currency: "USD" })
   const [aliasForm, setAliasForm] = useState({ raw_pattern: "", display_name: "", category_id: "" })
   const [applyRetroactively, setApplyRetroactively] = useState(true)
   const [reapplying, setReapplying] = useState(false)
+  const [showAISuggest, setShowAISuggest] = useState(false)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiSuggestions, setAiSuggestions] = useState<{
+    raw_description: string; raw_pattern: string; display_name: string
+    category_id: string; category_name: string; accepted?: boolean
+  }[]>([])
   const [tagsList, setTagsList] = useState<TagItem[]>([])
   const [showTagDialog, setShowTagDialog] = useState(false)
   const [tagForm, setTagForm] = useState({ id: "", name: "", color: "#6B7280" })
@@ -81,17 +89,49 @@ export default function SettingsPage() {
 
   useEffect(() => { fetchData() }, [])
 
-  const createAccount = async () => {
+  const saveAccount = async () => {
     if (!accountForm.name) return
+    const method = editingAccountId ? "PUT" : "POST"
+    const body = editingAccountId ? { id: editingAccountId, ...accountForm } : accountForm
     await fetch("/api/accounts", {
-      method: "POST",
+      method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(accountForm),
+      body: JSON.stringify(body),
     })
     setShowAccountDialog(false)
+    setEditingAccountId(null)
     setAccountForm({ name: "", type: "checking", institution: "", currency: "USD" })
     fetchData()
-    toast.success("Account created")
+    toast.success(editingAccountId ? "Account updated" : "Account created")
+  }
+
+  const editAccount = (acc: Account) => {
+    setEditingAccountId(acc.id)
+    setAccountForm({ name: acc.name, type: acc.type, institution: acc.institution, currency: acc.currency })
+    setShowAccountDialog(true)
+  }
+
+  const openNewAccount = () => {
+    setEditingAccountId(null)
+    setAccountForm({ name: "", type: "checking", institution: "", currency: "USD" })
+    setShowAccountDialog(true)
+  }
+
+  const confirmDeleteAccount = async () => {
+    if (!deletingAccount) return
+    const res = await fetch("/api/accounts", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: deletingAccount.id }),
+    })
+    const data = await res.json()
+    setDeletingAccount(null)
+    if (!res.ok) {
+      toast.error(data.error || "Failed to delete account")
+      return
+    }
+    fetchData()
+    toast.success("Account deleted")
   }
 
   const saveAlias = async () => {
@@ -130,6 +170,57 @@ export default function SettingsPage() {
     } finally {
       setReapplying(false)
     }
+  }
+
+  const runAISuggest = async () => {
+    setShowAISuggest(true)
+    setAiLoading(true)
+    setAiSuggestions([])
+    try {
+      const res = await fetch("/api/ai/suggest-aliases", { method: "POST" })
+      const data = await res.json()
+      if (data.error) {
+        toast.error(data.error)
+        setShowAISuggest(false)
+        return
+      }
+      if (data.message) {
+        toast.info(data.message)
+        setShowAISuggest(false)
+        return
+      }
+      setAiSuggestions((data.suggestions || []).map((s: any) => ({ ...s, accepted: true })))
+    } catch {
+      toast.error("Failed to get AI suggestions")
+      setShowAISuggest(false)
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  const acceptAISuggestions = async () => {
+    const accepted = aiSuggestions.filter(s => s.accepted)
+    if (accepted.length === 0) {
+      setShowAISuggest(false)
+      return
+    }
+    let created = 0
+    for (const s of accepted) {
+      await fetch("/api/aliases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          raw_pattern: s.raw_pattern,
+          display_name: s.display_name,
+          category_id: s.category_id || null,
+          apply_retroactively: true,
+        }),
+      })
+      created++
+    }
+    setShowAISuggest(false)
+    fetchData()
+    toast.success(`Created ${created} alias${created > 1 ? 'es' : ''} and applied to existing transactions`)
   }
 
   const editAlias = (alias: Alias) => {
@@ -282,7 +373,7 @@ export default function SettingsPage() {
             <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" /> Accounts</CardTitle>
             <CardDescription>Your bank and financial accounts</CardDescription>
           </div>
-          <Button onClick={() => setShowAccountDialog(true)} size="sm">
+          <Button onClick={openNewAccount} size="sm">
             <Plus className="h-4 w-4 mr-1" /> Add Account
           </Button>
         </CardHeader>
@@ -299,7 +390,15 @@ export default function SettingsPage() {
                     <p className="font-medium text-zinc-200">{acc.name}</p>
                     <p className="text-xs text-zinc-500">{acc.institution || "No institution"} &middot; {acc.currency}</p>
                   </div>
-                  <Badge variant="secondary" className="capitalize">{acc.type}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="capitalize">{acc.type}</Badge>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => editAccount(acc)}>
+                      <Edit2 className="h-3 w-3" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400" onClick={() => setDeletingAccount(acc)}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -315,6 +414,9 @@ export default function SettingsPage() {
             <CardDescription>Map raw bank descriptions to friendly names</CardDescription>
           </div>
           <div className="flex gap-2">
+            <Button onClick={runAISuggest} variant="outline" size="sm">
+              <Sparkles className="h-4 w-4 mr-1" /> AI Suggest
+            </Button>
             {aliases.length > 0 && (
               <Button onClick={reapplyAllAliases} variant="outline" size="sm" disabled={reapplying}>
                 {reapplying ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
@@ -477,10 +579,10 @@ export default function SettingsPage() {
       </Card>
 
       {/* Account Dialog */}
-      <Dialog open={showAccountDialog} onOpenChange={setShowAccountDialog}>
+      <Dialog open={showAccountDialog} onOpenChange={(open) => { setShowAccountDialog(open); if (!open) setEditingAccountId(null) }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Account</DialogTitle>
+            <DialogTitle>{editingAccountId ? "Edit" : "Add"} Account</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -513,8 +615,24 @@ export default function SettingsPage() {
             </div>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setShowAccountDialog(false)}>Cancel</Button>
-              <Button onClick={createAccount}>Create Account</Button>
+              <Button onClick={saveAccount}>{editingAccountId ? "Save" : "Create"} Account</Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Account Confirm */}
+      <Dialog open={!!deletingAccount} onOpenChange={(open) => { if (!open) setDeletingAccount(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Account</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-zinc-300">
+            Are you sure you want to delete <span className="font-semibold text-zinc-100">{deletingAccount?.name}</span>? This cannot be undone.
+          </p>
+          <div className="flex gap-2 justify-end mt-4">
+            <Button variant="outline" onClick={() => setDeletingAccount(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmDeleteAccount}>Delete Account</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -578,6 +696,78 @@ export default function SettingsPage() {
               <Button onClick={saveTag} disabled={!tagForm.name.trim()}>Save</Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Alias Suggestions Dialog */}
+      <Dialog open={showAISuggest} onOpenChange={setShowAISuggest}>
+        <DialogContent className="max-w-2xl flex flex-col !max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5" /> AI-Suggested Aliases
+            </DialogTitle>
+          </DialogHeader>
+          {aiLoading ? (
+            <div className="py-12 flex flex-col items-center gap-3 text-zinc-400">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <p className="text-sm">Analyzing your transactions...</p>
+            </div>
+          ) : aiSuggestions.length === 0 ? (
+            <div className="py-8 text-center text-zinc-500">No suggestions generated.</div>
+          ) : (
+            <>
+              <p className="text-sm text-zinc-400 shrink-0">
+                Review suggestions below. Toggle off any you don&apos;t want, then click Accept.
+              </p>
+              <div className="overflow-y-auto space-y-2 min-h-0 flex-1">
+                {aiSuggestions.map((s, i) => (
+                  <div
+                    key={i}
+                    className={`flex items-start gap-3 py-3 px-4 rounded-lg border transition-colors ${
+                      s.accepted ? 'bg-zinc-800/40 border-zinc-700/50' : 'bg-zinc-900/30 border-zinc-800/30 opacity-50'
+                    }`}
+                  >
+                    <button
+                      className={`mt-1 shrink-0 h-5 w-5 rounded border flex items-center justify-center transition-colors ${
+                        s.accepted ? 'bg-blue-500 border-blue-500' : 'border-zinc-600'
+                      }`}
+                      onClick={() => {
+                        const updated = [...aiSuggestions]
+                        updated[i] = { ...s, accepted: !s.accepted }
+                        setAiSuggestions(updated)
+                      }}
+                    >
+                      {s.accepted && <Check className="h-3 w-3 text-white" />}
+                    </button>
+                    <div className="flex-1 min-w-0 overflow-hidden">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-zinc-200">{s.display_name}</span>
+                        {s.category_name && (
+                          <Badge variant="secondary" className="text-xs">{s.category_name}</Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-zinc-500 mt-0.5 truncate">
+                        Pattern: <span className="text-zinc-400">&quot;{s.raw_pattern}&quot;</span>
+                        <span className="mx-1.5">&middot;</span>
+                        From: <span className="text-zinc-400">&quot;{s.raw_description}&quot;</span>
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between shrink-0 border-t border-zinc-800 pt-3">
+                <p className="text-xs text-zinc-500">
+                  {aiSuggestions.filter(s => s.accepted).length} of {aiSuggestions.length} selected
+                </p>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setShowAISuggest(false)}>Cancel</Button>
+                  <Button onClick={acceptAISuggestions} disabled={aiSuggestions.filter(s => s.accepted).length === 0}>
+                    <Check className="h-4 w-4 mr-1" /> Accept & Create
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
