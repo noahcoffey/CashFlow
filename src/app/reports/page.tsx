@@ -13,6 +13,7 @@ import {
   PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area,
 } from "recharts"
 import { Badge } from "@/components/ui/badge"
+import { ChartErrorBoundary } from "@/components/chart-error-boundary"
 
 type ReportType = "spending-by-category" | "monthly-trends" | "income-vs-expenses" | "net-worth" | "year-over-year"
 
@@ -120,7 +121,7 @@ export default function ReportsPage() {
                 No data available for this report
               </div>
             ) : (
-              <>
+              <ChartErrorBoundary>
                 {reportType === "spending-by-category" && (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <ResponsiveContainer width="100%" height={350}>
@@ -278,7 +279,7 @@ export default function ReportsPage() {
                     </div>
                   )
                 })()}
-              </>
+              </ChartErrorBoundary>
             )}
           </CardContent>
         </Card>
