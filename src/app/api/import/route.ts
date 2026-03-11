@@ -4,6 +4,8 @@ import { applyAliasesToTransactions } from '@/lib/alias-engine'
 import { applyRulesToTransactions } from '@/lib/rules-engine'
 import { parseDate } from '@/lib/csv-parser'
 
+const MAX_IMPORT_SIZE = 5000
+
 export async function POST(request: Request) {
   try {
     const db = getDb()
@@ -11,6 +13,10 @@ export async function POST(request: Request) {
 
     if (!accountId || !Array.isArray(transactions) || transactions.length === 0) {
       return NextResponse.json({ error: 'accountId and transactions array are required' }, { status: 400 })
+    }
+
+    if (transactions.length > MAX_IMPORT_SIZE) {
+      return NextResponse.json({ error: `Import limited to ${MAX_IMPORT_SIZE} transactions per request` }, { status: 400 })
     }
 
     const account = db.prepare('SELECT id FROM accounts WHERE id = ?').get(accountId)
