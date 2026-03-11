@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
+import { createAccountSchema, updateAccountSchema, deleteAccountSchema, validateBody } from '@/lib/validation'
 
 export async function GET() {
   try {
@@ -15,16 +16,17 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const db = getDb()
-    const { name, type, institution, currency } = await request.json()
-
-    if (!name || !type) {
-      return NextResponse.json({ error: 'Name and type are required' }, { status: 400 })
+    const body = await request.json()
+    const validation = validateBody(createAccountSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
     }
+    const { name, type, institution, currency } = validation.data
 
     const id = crypto.randomUUID()
     db.prepare(
       'INSERT INTO accounts (id, name, type, institution, currency) VALUES (?, ?, ?, ?, ?)'
-    ).run(id, name, type, institution || '', currency || 'USD')
+    ).run(id, name, type, institution, currency)
 
     const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(id)
     return NextResponse.json(account, { status: 201 })
@@ -37,11 +39,12 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const db = getDb()
-    const { id, name, type, institution, currency } = await request.json()
-
-    if (!id) {
-      return NextResponse.json({ error: 'Account id is required' }, { status: 400 })
+    const body = await request.json()
+    const validation = validateBody(updateAccountSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
     }
+    const { id, name, type, institution, currency } = validation.data
 
     db.prepare(
       `UPDATE accounts SET
@@ -63,11 +66,12 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const db = getDb()
-    const { id } = await request.json()
-
-    if (!id) {
-      return NextResponse.json({ error: 'Account id is required' }, { status: 400 })
+    const body = await request.json()
+    const validation = validateBody(deleteAccountSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
     }
+    const { id } = validation.data
 
     const txnCount = db.prepare('SELECT COUNT(*) as count FROM transactions WHERE account_id = ?').get(id) as { count: number }
     if (txnCount.count > 0) {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
+import { createBudgetSchema, validateBody } from '@/lib/validation'
 
 export async function GET() {
   try {
@@ -34,11 +35,12 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const db = getDb()
-    const { category_id, amount, period, start_date, end_date } = await request.json()
-
-    if (!category_id || amount === undefined || !period) {
-      return NextResponse.json({ error: 'category_id, amount, and period are required' }, { status: 400 })
+    const body = await request.json()
+    const validation = validateBody(createBudgetSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
     }
+    const { category_id, amount, period, start_date, end_date } = validation.data
 
     // Check if budget already exists for this category
     const existing = db.prepare('SELECT id FROM budgets WHERE category_id = ?').get(category_id) as { id: string } | undefined

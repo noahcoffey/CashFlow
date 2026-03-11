@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
+import { createTransactionSchema, updateTransactionSchema, deleteTransactionSchema, validateBody } from '@/lib/validation'
 
 export async function GET(request: NextRequest) {
   try {
@@ -116,17 +117,18 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
   try {
     const db = getDb()
-    const { account_id, date, amount, raw_description, display_name, category_id, notes } = await request.json()
-
-    if (!account_id || !date || amount === undefined || !raw_description) {
-      return NextResponse.json({ error: 'account_id, date, amount, and raw_description are required' }, { status: 400 })
+    const body = await request.json()
+    const validation = validateBody(createTransactionSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
     }
+    const { account_id, date, amount, raw_description, display_name, category_id, notes } = validation.data
 
     const id = crypto.randomUUID()
     db.prepare(
       `INSERT INTO transactions (id, account_id, date, amount, raw_description, display_name, category_id, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, account_id, date, amount, raw_description, display_name || '', category_id || null, notes || '')
+    ).run(id, account_id, date, amount, raw_description, display_name, category_id || null, notes)
 
     const transaction = db.prepare('SELECT * FROM transactions WHERE id = ?').get(id)
     return NextResponse.json(transaction, { status: 201 })
@@ -139,11 +141,12 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const db = getDb()
-    const { id, account_id, date, amount, raw_description, display_name, category_id, is_reconciled, notes } = await request.json()
-
-    if (!id) {
-      return NextResponse.json({ error: 'Transaction id is required' }, { status: 400 })
+    const body = await request.json()
+    const validation = validateBody(updateTransactionSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
     }
+    const { id, account_id, date, amount, raw_description, display_name, category_id, is_reconciled, notes } = validation.data
 
     const existing = db.prepare('SELECT * FROM transactions WHERE id = ?').get(id)
     if (!existing) {
@@ -192,11 +195,12 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const db = getDb()
-    const { id } = await request.json()
-
-    if (!id) {
-      return NextResponse.json({ error: 'Transaction id is required' }, { status: 400 })
+    const body = await request.json()
+    const validation = validateBody(deleteTransactionSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
     }
+    const { id } = validation.data
 
     const result = db.prepare('DELETE FROM transactions WHERE id = ?').run(id)
     if (result.changes === 0) {
