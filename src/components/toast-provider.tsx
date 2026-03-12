@@ -1,15 +1,19 @@
 "use client"
 
 import { Toaster } from "sonner"
-import { useTheme } from "next-themes"
 
 export function ToastProvider() {
-  const { resolvedTheme } = useTheme()
-
   return (
     <Toaster
-      theme={resolvedTheme === "dark" ? "dark" : "light"}
+      theme="dark"
       position="bottom-right"
+      toastOptions={{
+        style: {
+          background: '#18181b',
+          border: '1px solid #27272a',
+          color: '#fafafa',
+        },
+      }}
     />
   )
 }
