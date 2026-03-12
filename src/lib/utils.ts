@@ -6,7 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number, currency = 'USD'): string {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat(undefined, {
     style: 'currency',
     currency,
   }).format(amount)
@@ -14,7 +14,7 @@ export function formatCurrency(amount: number, currency = 'USD'): string {
 
 export function formatDate(date: string | Date): string {
   const d = typeof date === 'string' ? new Date(date) : date
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export function generateId(): string {
