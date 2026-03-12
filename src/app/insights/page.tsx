@@ -37,8 +37,8 @@ function useAI<T>(endpoint: string) {
         return
       }
       setResult({ data: data.data || data, error: null, loading: false, cached_at: data.cached_at || null })
-    } catch (e: any) {
-      setResult({ data: null, error: e.message, loading: false, cached_at: null })
+    } catch (e: unknown) {
+      setResult({ data: null, error: e instanceof Error ? e.message : 'An unexpected error occurred', loading: false, cached_at: null })
     }
   }
 
@@ -76,8 +76,8 @@ export default function InsightsPage() {
       } else {
         setQueryResult(data.answer)
       }
-    } catch (e: any) {
-      setQueryError(e.message)
+    } catch (e: unknown) {
+      setQueryError(e instanceof Error ? e.message : 'An unexpected error occurred')
     } finally {
       setQueryLoading(false)
     }

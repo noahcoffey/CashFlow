@@ -81,9 +81,9 @@ Be concise with patterns — use the shortest unique substring. For example, "ST
     }
 
     return NextResponse.json({ suggestions })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error suggesting aliases:', error)
-    if (error.message === 'CLAUDE_NOT_FOUND') {
+    if (error instanceof Error && error.message === 'CLAUDE_NOT_FOUND') {
       return NextResponse.json({ error: 'Claude CLI not installed' }, { status: 503 })
     }
     return NextResponse.json({ error: 'Failed to generate suggestions' }, { status: 500 })

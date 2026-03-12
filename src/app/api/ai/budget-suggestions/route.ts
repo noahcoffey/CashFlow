@@ -92,9 +92,9 @@ Respond ONLY with valid JSON, no other text. Use this exact format:
     const elapsed = ((Date.now() - routeStart) / 1000).toFixed(1)
     console.log(`[budget-suggestions] Done in ${elapsed}s`)
     return NextResponse.json(result)
-  } catch (error: any) {
+  } catch (error: unknown) {
     const elapsed = ((Date.now() - routeStart) / 1000).toFixed(1)
-    if (error.message === 'CLAUDE_NOT_FOUND') {
+    if (error instanceof Error && error.message === 'CLAUDE_NOT_FOUND') {
       console.error(`[budget-suggestions] Claude CLI not found (${elapsed}s)`)
       return NextResponse.json({ error: 'CLAUDE_NOT_FOUND' }, { status: 503 })
     }
