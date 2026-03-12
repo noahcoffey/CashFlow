@@ -1,4 +1,5 @@
 import { getDb } from './db'
+import { safeParseJSON } from './utils'
 
 export interface RuleCondition {
   field: 'description' | 'amount' | 'account'
@@ -87,11 +88,12 @@ export function applyRulesToTransactions(transactionIds?: string[]) {
 
   if (rules.length === 0) return { total: 0, matched: 0, ruleMatches: {} as Record<string, number> }
 
-  // Parse JSON fields
+  // Parse JSON fields — skip rules with malformed data
   for (const rule of rules) {
-    rule.conditions = JSON.parse(rule.conditions as unknown as string)
-    rule.actions = JSON.parse(rule.actions as unknown as string)
+    rule.conditions = safeParseJSON(rule.conditions as unknown as string) as RuleCondition[]
+    rule.actions = safeParseJSON(rule.actions as unknown as string) as RuleAction[]
   }
+  const validRules = rules.filter(r => Array.isArray(r.conditions) && Array.isArray(r.actions))
 
   let transactions: Transaction[]
   if (transactionIds) {
@@ -117,7 +119,7 @@ export function applyRulesToTransactions(transactionIds?: string[]) {
 
   const applyAll = db.transaction(() => {
     for (const txn of transactions) {
-      for (const rule of rules) {
+      for (const rule of validRules) {
         if (evaluateRule(rule, txn)) {
           for (const action of rule.actions) {
             switch (action.type) {
