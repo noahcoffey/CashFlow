@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatCurrency, formatDate } from "@/lib/utils"
+import { RECURRING_CONFIDENCE_THRESHOLD } from "@/lib/constants"
 import { RefreshCw, CalendarClock, TrendingDown, Plus, Trash2, Check, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 
@@ -191,7 +192,7 @@ export default function SubscriptionsPage() {
                         <Badge variant="secondary" className={`text-xs ${frequencyColor[p.frequency]}`}>
                           {frequencyLabel[p.frequency]}
                         </Badge>
-                        {p.confidence >= 0.8 && (
+                        {p.confidence >= RECURRING_CONFIDENCE_THRESHOLD && (
                           <Badge variant="success" className="text-xs">High confidence</Badge>
                         )}
                       </div>

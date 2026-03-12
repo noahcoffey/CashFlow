@@ -65,13 +65,18 @@ interface Bill {
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [bills, setBills] = useState<Bill[]>([])
 
   useEffect(() => {
+    setError(null)
     fetch("/api/dashboard")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Failed to load dashboard (${r.status})`)
+        return r.json()
+      })
       .then(setData)
-      .catch(console.error)
+      .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
     fetch("/api/bills")
       .then(r => r.json())
@@ -80,6 +85,19 @@ export default function DashboardPage() {
   }, [])
 
   if (loading) return <DashboardSkeleton />
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <AlertCircle className="h-10 w-10 text-red-400 mb-3" />
+        <h2 className="text-lg font-semibold text-zinc-200">Failed to load dashboard</h2>
+        <p className="text-sm text-zinc-500 mt-1 mb-4">{error}</p>
+        <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+          Try again
+        </Button>
+      </div>
+    )
+  }
 
   if (!data || (data.accountBalances.length === 0 && data.recentTransactions.length === 0)) {
     return <WelcomeScreen />
