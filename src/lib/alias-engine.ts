@@ -1,4 +1,5 @@
 import { getDb } from './db'
+import { ALIAS_MATCH_THRESHOLD } from './constants'
 
 interface MerchantAlias {
   id: string
@@ -44,11 +45,10 @@ export function matchAlias(rawDescription: string): MerchantAlias | null {
 
   let bestMatch: MerchantAlias | null = null
   let bestScore = 0
-  const THRESHOLD = 0.5
 
   for (const alias of aliases) {
     const score = calculateSimilarity(rawDescription, alias.raw_pattern)
-    if (score > bestScore && score >= THRESHOLD) {
+    if (score > bestScore && score >= ALIAS_MATCH_THRESHOLD) {
       bestScore = score
       bestMatch = alias
     }
