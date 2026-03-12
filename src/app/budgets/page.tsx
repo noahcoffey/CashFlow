@@ -59,19 +59,22 @@ export default function BudgetsPage() {
   const fetchData = () => {
     setLoading(true)
     Promise.all([
-      fetch("/api/budgets").then((r) => r.json()),
-      fetch("/api/categories").then((r) => r.json()),
+      fetch("/api/budgets").then((r) => { if (!r.ok) throw new Error("Failed to load budgets"); return r.json() }),
+      fetch("/api/categories").then((r) => { if (!r.ok) throw new Error("Failed to load categories"); return r.json() }),
     ]).then(([budgetData, catData]) => {
       setBudgets(budgetData.budgets || [])
       setCategories(catData.categories || [])
-    }).finally(() => setLoading(false))
+    }).catch((err) => toast.error(err.message))
+      .finally(() => setLoading(false))
   }
 
   const fetchHistory = () => {
     setHistoryLoading(true)
-    fetch("/api/budgets/history").then(r => r.json()).then(d => {
-      setSpendingHistory(d.categories || [])
-    }).finally(() => setHistoryLoading(false))
+    fetch("/api/budgets/history")
+      .then(r => { if (!r.ok) throw new Error("Failed to load spending history"); return r.json() })
+      .then(d => { setSpendingHistory(d.categories || []) })
+      .catch((err) => toast.error(err.message))
+      .finally(() => setHistoryLoading(false))
   }
 
   useEffect(() => { fetchData(); fetchHistory() }, [])
