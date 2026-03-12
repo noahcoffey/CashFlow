@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import { toCSV } from '@/lib/csv-export'
 import { buildTransactionFilters } from '@/lib/transaction-filters'
+import { MAX_EXPORT_SIZE } from '@/lib/constants'
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,6 +13,17 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate')
     const { whereClause, params } = buildTransactionFilters(searchParams)
 
+    const countResult = db.prepare(
+      `SELECT COUNT(*) as total FROM transactions t ${whereClause}`
+    ).get(...params) as { total: number }
+
+    if (countResult.total > MAX_EXPORT_SIZE) {
+      return NextResponse.json(
+        { error: `Export limited to ${MAX_EXPORT_SIZE} transactions. Found ${countResult.total} — please narrow your filters.` },
+        { status: 400 }
+      )
+    }
+
     const transactions = db.prepare(
       `SELECT t.date, t.raw_description, t.display_name, t.amount, t.notes,
               c.name as category_name, a.name as account_name
@@ -19,8 +31,9 @@ export async function GET(request: NextRequest) {
        LEFT JOIN categories c ON t.category_id = c.id
        LEFT JOIN accounts a ON t.account_id = a.id
        ${whereClause}
-       ORDER BY t.date DESC, t.created_at DESC`
-    ).all(...params) as Array<{
+       ORDER BY t.date DESC, t.created_at DESC
+       LIMIT ?`
+    ).all(...params, MAX_EXPORT_SIZE) as Array<{
       date: string
       raw_description: string
       display_name: string
