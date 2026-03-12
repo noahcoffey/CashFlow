@@ -122,6 +122,41 @@ export const deleteBillSchema = z.object({
   id: uuid,
 })
 
+// Tag schemas
+export const createTagSchema = z.object({
+  name: z.string().min(1, 'Tag name is required').max(100),
+  color: z.string().max(20).default('#6B7280'),
+})
+
+export const updateTagSchema = z.object({
+  id: uuid,
+  name: z.string().min(1).max(100).optional(),
+  color: z.string().max(20).optional(),
+})
+
+export const deleteTagSchema = z.object({
+  id: uuid,
+})
+
+// Alias schemas
+export const createAliasSchema = z.object({
+  raw_pattern: z.string().min(1, 'Match pattern is required').max(500),
+  display_name: z.string().min(1, 'Display name is required').max(500),
+  category_id: z.string().nullable().optional(),
+  apply_retroactively: z.boolean().optional(),
+})
+
+export const updateAliasSchema = z.object({
+  id: uuid,
+  raw_pattern: z.string().min(1).max(500).optional(),
+  display_name: z.string().min(1).max(500).optional(),
+  category_id: z.string().nullable().optional(),
+})
+
+export const deleteAliasSchema = z.object({
+  id: uuid,
+})
+
 /**
  * Validate request body against a Zod schema.
  * Returns { data } on success or { error, status } on failure.
