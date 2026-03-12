@@ -34,8 +34,14 @@ export default function ReconcilePage() {
   const [balanceError, setBalanceError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch("/api/accounts").then(r => r.json()).then(d => setAccounts(d.accounts || []))
-    fetch("/api/reconciliation").then(r => r.json()).then(d => setSessions(d.sessions || []))
+    fetch("/api/accounts")
+      .then(r => { if (!r.ok) throw new Error("Failed to load accounts"); return r.json() })
+      .then(d => setAccounts(d.accounts || []))
+      .catch(() => toast.error("Failed to load accounts"))
+    fetch("/api/reconciliation")
+      .then(r => { if (!r.ok) throw new Error("Failed to load sessions"); return r.json() })
+      .then(d => setSessions(d.sessions || []))
+      .catch(() => toast.error("Failed to load reconciliation sessions"))
   }, [])
 
   const startSession = async () => {
@@ -46,23 +52,33 @@ export default function ReconcilePage() {
       return
     }
     setBalanceError(null)
-    const res = await fetch("/api/reconciliation", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ account_id: accountId, statement_date: statementDate, statement_balance: parsed }),
-    })
-    const data = await res.json()
-    setActiveSession(data.session)
-    loadSessionTransactions(data.session.id)
-    toast.success("Reconciliation session started")
+    try {
+      const res = await fetch("/api/reconciliation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id: accountId, statement_date: statementDate, statement_balance: parsed }),
+      })
+      if (!res.ok) throw new Error("Failed to start reconciliation session")
+      const data = await res.json()
+      setActiveSession(data.session)
+      loadSessionTransactions(data.session.id)
+      toast.success("Reconciliation session started")
+    } catch {
+      toast.error("Failed to start reconciliation session")
+    }
   }
 
   const loadSessionTransactions = async (sessionId: string) => {
-    const res = await fetch(`/api/reconciliation/${sessionId}`)
-    const data = await res.json()
-    setTransactions(data.transactions || [])
-    setActiveSession(data.session)
-    setCleared(new Set(data.transactions?.filter((t: Transaction) => t.is_reconciled).map((t: Transaction) => t.id) || []))
+    try {
+      const res = await fetch(`/api/reconciliation/${sessionId}`)
+      if (!res.ok) throw new Error("Failed to load session")
+      const data = await res.json()
+      setTransactions(data.transactions || [])
+      setActiveSession(data.session)
+      setCleared(new Set(data.transactions?.filter((t: Transaction) => t.is_reconciled).map((t: Transaction) => t.id) || []))
+    } catch {
+      toast.error("Failed to load reconciliation transactions")
+    }
   }
 
   const toggleCleared = (id: string) => {
@@ -80,16 +96,24 @@ export default function ReconcilePage() {
 
   const finishReconciliation = async () => {
     if (!activeSession) return
-    await fetch(`/api/reconciliation/${activeSession.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "completed", clearedIds: Array.from(cleared) }),
-    })
-    setActiveSession(null)
-    setTransactions([])
-    setCleared(new Set())
-    fetch("/api/reconciliation").then(r => r.json()).then(d => setSessions(d.sessions || []))
-    toast.success("Reconciliation completed!")
+    try {
+      const res = await fetch(`/api/reconciliation/${activeSession.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "completed", clearedIds: Array.from(cleared) }),
+      })
+      if (!res.ok) throw new Error("Failed to complete reconciliation")
+      setActiveSession(null)
+      setTransactions([])
+      setCleared(new Set())
+      fetch("/api/reconciliation")
+        .then(r => { if (!r.ok) throw new Error(); return r.json() })
+        .then(d => setSessions(d.sessions || []))
+        .catch(() => toast.error("Failed to refresh sessions"))
+      toast.success("Reconciliation completed!")
+    } catch {
+      toast.error("Failed to complete reconciliation")
+    }
   }
 
   const clearedBalance = transactions
