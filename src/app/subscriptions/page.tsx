@@ -35,14 +35,18 @@ export default function SubscriptionsPage() {
   const [patterns, setPatterns] = useState<RecurringPattern[]>([])
   const [totalMonthly, setTotalMonthly] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [bills, setBills] = useState<Bill[]>([])
   const [showBillDialog, setShowBillDialog] = useState(false)
   const [billForm, setBillForm] = useState({
     name: "", amount: "", frequency: "monthly", next_due_date: ""
   })
 
-  const fetchBills = () => {
-    fetch("/api/bills").then(r => r.json()).then(d => setBills(d.bills || []))
+  const fetchBills = async () => {
+    const res = await fetch("/api/bills")
+    if (!res.ok) throw new Error(`Failed to load bills (${res.status})`)
+    const d = await res.json()
+    setBills(d.bills || [])
   }
 
   const createBill = async () => {
@@ -85,19 +89,22 @@ export default function SubscriptionsPage() {
 
   const fetch_ = async () => {
     setLoading(true)
+    setError(null)
     try {
       const res = await fetch("/api/transactions/recurring")
+      if (!res.ok) throw new Error(`Failed to load recurring transactions (${res.status})`)
       const data = await res.json()
       setPatterns(data.patterns || [])
       setTotalMonthly(data.totalMonthly || 0)
-    } catch {
-      toast.error("Failed to load recurring transactions")
+      await fetchBills()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load subscriptions")
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { fetch_(); fetchBills() }, [])
+  useEffect(() => { fetch_() }, [])
 
   const totalAnnual = patterns.reduce((s, p) => s + p.totalAnnual, 0)
 
@@ -127,6 +134,19 @@ export default function SubscriptionsPage() {
           <Skeleton className="h-24" />
         </div>
         <Skeleton className="h-64" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <AlertCircle className="h-10 w-10 text-red-400 mb-3" />
+        <h2 className="text-lg font-semibold text-zinc-200">Failed to load subscriptions</h2>
+        <p className="text-sm text-zinc-500 mt-1 mb-4">{error}</p>
+        <Button variant="outline" size="sm" onClick={() => fetch_()}>
+          Try again
+        </Button>
       </div>
     )
   }
