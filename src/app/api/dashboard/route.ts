@@ -103,6 +103,11 @@ export async function GET() {
        ORDER BY c.name`
     ).all(thisMonthStart, thisMonthEnd)
 
+    // Uncategorized transaction count
+    const uncategorizedResult = db.prepare(
+      'SELECT COUNT(*) as count FROM transactions WHERE category_id IS NULL'
+    ).get() as { count: number }
+
     return NextResponse.json({
       monthlySpending: monthlySummary.monthly_spending,
       lastMonthSpending: monthlySummary.last_month_spending,
@@ -112,6 +117,7 @@ export async function GET() {
       accountBalances,
       cashFlowByMonth,
       budgetUtilization,
+      uncategorizedCount: uncategorizedResult.count,
     })
   } catch (error) {
     console.error('Error fetching dashboard data:', error)
