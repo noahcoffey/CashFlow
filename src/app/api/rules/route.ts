@@ -1,6 +1,28 @@
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import { applyRulesToTransactions } from '@/lib/rules-engine'
+import { validateBody, createRuleSchema, updateRuleSchema, deleteRuleSchema } from '@/lib/validation'
+
+interface RuleRow {
+  id: string
+  name: string
+  priority: number
+  conditions: string
+  actions: string
+  is_active: number
+  match_count: number
+  created_at: string
+  category_name: string | null
+  category_icon: string | null
+}
+
+function safeParseJSON(json: string, fallback: unknown[] = []): unknown {
+  try {
+    return JSON.parse(json)
+  } catch {
+    return fallback
+  }
+}
 
 export async function GET() {
   try {
@@ -11,13 +33,12 @@ export async function GET() {
        LEFT JOIN categories c ON json_extract(r.actions, '$[0].value') = c.id
          AND json_extract(r.actions, '$[0].type') = 'set_category'
        ORDER BY r.priority DESC, r.created_at DESC`
-    ).all()
+    ).all() as RuleRow[]
 
-    // Parse JSON fields
-    const parsed = (rules as any[]).map(r => ({
+    const parsed = rules.map(r => ({
       ...r,
-      conditions: JSON.parse(r.conditions),
-      actions: JSON.parse(r.actions),
+      conditions: safeParseJSON(r.conditions),
+      actions: safeParseJSON(r.actions),
     }))
 
     return NextResponse.json({ rules: parsed })
@@ -30,28 +51,33 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const db = getDb()
-    const { name, priority, conditions, actions, apply_retroactively } = await request.json()
-
-    if (!name || !conditions?.length || !actions?.length) {
-      return NextResponse.json({ error: 'name, conditions, and actions are required' }, { status: 400 })
+    const body = await request.json()
+    const parsed = validateBody(createRuleSchema, body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status })
     }
+    const { name, priority, conditions, actions, apply_retroactively } = parsed.data
 
     const id = crypto.randomUUID()
     db.prepare(
       `INSERT INTO categorization_rules (id, name, priority, conditions, actions)
        VALUES (?, ?, ?, ?, ?)`
-    ).run(id, name, priority || 0, JSON.stringify(conditions), JSON.stringify(actions))
+    ).run(id, name, priority, JSON.stringify(conditions), JSON.stringify(actions))
 
     let retroactiveResult = null
     if (apply_retroactively) {
       retroactiveResult = applyRulesToTransactions()
     }
 
-    const rule = db.prepare('SELECT * FROM categorization_rules WHERE id = ?').get(id) as any
-    rule.conditions = JSON.parse(rule.conditions)
-    rule.actions = JSON.parse(rule.actions)
-
-    return NextResponse.json({ rule, retroactive: retroactiveResult }, { status: 201 })
+    const rule = db.prepare('SELECT * FROM categorization_rules WHERE id = ?').get(id) as RuleRow
+    return NextResponse.json({
+      rule: {
+        ...rule,
+        conditions: safeParseJSON(rule.conditions),
+        actions: safeParseJSON(rule.actions),
+      },
+      retroactive: retroactiveResult,
+    }, { status: 201 })
   } catch (error) {
     console.error('Error creating rule:', error)
     return NextResponse.json({ error: 'Failed to create rule' }, { status: 500 })
@@ -61,11 +87,12 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const db = getDb()
-    const { id, name, priority, conditions, actions, is_active } = await request.json()
-
-    if (!id) {
-      return NextResponse.json({ error: 'Rule id is required' }, { status: 400 })
+    const body = await request.json()
+    const parsed = validateBody(updateRuleSchema, body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status })
     }
+    const { id, name, priority, conditions, actions, is_active } = parsed.data
 
     db.prepare(
       `UPDATE categorization_rules SET
@@ -76,7 +103,7 @@ export async function PUT(request: Request) {
         is_active = COALESCE(?, is_active)
        WHERE id = ?`
     ).run(
-      name || null,
+      name ?? null,
       priority ?? null,
       conditions ? JSON.stringify(conditions) : null,
       actions ? JSON.stringify(actions) : null,
@@ -84,11 +111,14 @@ export async function PUT(request: Request) {
       id
     )
 
-    const rule = db.prepare('SELECT * FROM categorization_rules WHERE id = ?').get(id) as any
-    rule.conditions = JSON.parse(rule.conditions)
-    rule.actions = JSON.parse(rule.actions)
-
-    return NextResponse.json({ rule })
+    const rule = db.prepare('SELECT * FROM categorization_rules WHERE id = ?').get(id) as RuleRow
+    return NextResponse.json({
+      rule: {
+        ...rule,
+        conditions: safeParseJSON(rule.conditions),
+        actions: safeParseJSON(rule.actions),
+      },
+    })
   } catch (error) {
     console.error('Error updating rule:', error)
     return NextResponse.json({ error: 'Failed to update rule' }, { status: 500 })
@@ -98,11 +128,12 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const db = getDb()
-    const { id } = await request.json()
-
-    if (!id) {
-      return NextResponse.json({ error: 'Rule id is required' }, { status: 400 })
+    const body = await request.json()
+    const parsed = validateBody(deleteRuleSchema, body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status })
     }
+    const { id } = parsed.data
 
     db.prepare('DELETE FROM categorization_rules WHERE id = ?').run(id)
     return NextResponse.json({ success: true })
