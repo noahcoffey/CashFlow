@@ -4,6 +4,7 @@ import {
   BUDGET_WARNING_THRESHOLD,
   BUDGET_OVER_THRESHOLD,
   RECURRING_CONFIDENCE_THRESHOLD,
+  ALIAS_MATCH_THRESHOLD,
 } from '../constants'
 
 describe('shared constants', () => {
@@ -22,6 +23,12 @@ describe('shared constants', () => {
     expect(RECURRING_CONFIDENCE_THRESHOLD).toBe(0.8)
     expect(RECURRING_CONFIDENCE_THRESHOLD).toBeGreaterThan(0)
     expect(RECURRING_CONFIDENCE_THRESHOLD).toBeLessThanOrEqual(1)
+  })
+
+  it('exports ALIAS_MATCH_THRESHOLD between 0 and 1', () => {
+    expect(ALIAS_MATCH_THRESHOLD).toBe(0.5)
+    expect(ALIAS_MATCH_THRESHOLD).toBeGreaterThan(0)
+    expect(ALIAS_MATCH_THRESHOLD).toBeLessThanOrEqual(1)
   })
 })
 
@@ -54,5 +61,13 @@ describe('pages use shared constants (not magic numbers)', () => {
     )
     expect(source).toContain('RECURRING_CONFIDENCE_THRESHOLD')
     expect(source).not.toMatch(/confidence >= 0\.8/)
+  })
+
+  it('alias engine imports ALIAS_MATCH_THRESHOLD', () => {
+    const source = fs.readFileSync(
+      path.resolve(__dirname, '../alias-engine.ts'), 'utf-8'
+    )
+    expect(source).toContain('ALIAS_MATCH_THRESHOLD')
+    expect(source).not.toMatch(/const THRESHOLD = 0\.5/)
   })
 })
