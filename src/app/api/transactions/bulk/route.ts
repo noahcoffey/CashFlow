@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 
+const MAX_BULK_SIZE = 500
+
 export async function PUT(request: Request) {
   try {
     const db = getDb()
@@ -9,6 +11,10 @@ export async function PUT(request: Request) {
 
     if (!Array.isArray(idList) || idList.length === 0) {
       return NextResponse.json({ error: 'ids array is required' }, { status: 400 })
+    }
+
+    if (idList.length > MAX_BULK_SIZE) {
+      return NextResponse.json({ error: `Bulk operations limited to ${MAX_BULK_SIZE} items` }, { status: 400 })
     }
 
     const placeholders = idList.map(() => '?').join(',')
@@ -30,6 +36,10 @@ export async function DELETE(request: Request) {
 
     if (!Array.isArray(ids) || ids.length === 0) {
       return NextResponse.json({ error: 'ids array is required' }, { status: 400 })
+    }
+
+    if (ids.length > MAX_BULK_SIZE) {
+      return NextResponse.json({ error: `Bulk operations limited to ${MAX_BULK_SIZE} items` }, { status: 400 })
     }
 
     const placeholders = ids.map(() => '?').join(',')
