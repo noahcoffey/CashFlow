@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Upload, FileText, Check, AlertCircle, ArrowRight, X } from "lucide-react"
+import { Upload, FileText, Check, AlertCircle, ArrowRight, X, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 
 interface Account {
@@ -45,10 +45,21 @@ export default function ImportPage() {
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, fileName: "" })
   const [dragActive, setDragActive] = useState(false)
   const [amountMode, setAmountMode] = useState<"single" | "split">("single")
+  const [accountsError, setAccountsError] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetch("/api/accounts").then((r) => r.json()).then((d) => setAccounts(d.accounts || []))
-  }, [])
+  const loadAccounts = async () => {
+    setAccountsError(null)
+    try {
+      const res = await fetch("/api/accounts")
+      if (!res.ok) throw new Error(`Failed to load accounts (${res.status})`)
+      const d = await res.json()
+      setAccounts(d.accounts || [])
+    } catch (err) {
+      setAccountsError(err instanceof Error ? err.message : "Failed to load accounts")
+    }
+  }
+
+  useEffect(() => { loadAccounts() }, [])
 
   const handleFiles = async (newFiles: FileList | File[]) => {
     const csvFiles = Array.from(newFiles).filter(f => f.name.endsWith(".csv") || f.type === "text/csv")
@@ -64,6 +75,10 @@ export default function ImportPage() {
 
     try {
       const res = await fetch("/api/import/parse", { method: "POST", body: formData })
+      if (!res.ok) {
+        toast.error(`Failed to parse CSV (${res.status})`)
+        return
+      }
       const data = await res.json()
       if (data.error) {
         toast.error(data.error)
@@ -106,6 +121,7 @@ export default function ImportPage() {
     formData.append("mapping", JSON.stringify(mapping))
 
     const parseRes = await fetch("/api/import/parse", { method: "POST", body: formData })
+    if (!parseRes.ok) throw new Error(`Failed to parse ${file.name} (${parseRes.status})`)
     const parseData = await parseRes.json()
 
     const { headers: h, allRows } = parseData
@@ -139,6 +155,7 @@ export default function ImportPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ accountId, transactions }),
     })
+    if (!res.ok) throw new Error(`Import failed for ${file.name} (${res.status})`)
     const data = await res.json()
     return { name: file.name, imported: data.imported, duplicates: data.duplicates, matched: data.matched }
   }
@@ -198,6 +215,22 @@ export default function ImportPage() {
           )
         })}
       </div>
+
+      {/* Error loading accounts */}
+      {accountsError && (
+        <Card>
+          <CardContent className="p-8">
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <AlertCircle className="h-10 w-10 text-red-400 mb-3" />
+              <h2 className="text-lg font-semibold text-zinc-200">Failed to load accounts</h2>
+              <p className="text-sm text-zinc-500 mt-1 mb-4">{accountsError}</p>
+              <Button variant="outline" size="sm" onClick={loadAccounts}>
+                <RefreshCw className="h-4 w-4 mr-1" /> Try again
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Step: Upload */}
       {step === "upload" && (
