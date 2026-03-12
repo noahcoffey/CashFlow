@@ -5,7 +5,15 @@ import { createAccountSchema, updateAccountSchema, deleteAccountSchema, validate
 export async function GET() {
   try {
     const db = getDb()
-    const accounts = db.prepare('SELECT * FROM accounts ORDER BY created_at DESC').all()
+    const accounts = db.prepare(
+      `SELECT a.*,
+        COALESCE(SUM(t.amount), 0) as balance,
+        COUNT(t.id) as transaction_count
+       FROM accounts a
+       LEFT JOIN transactions t ON t.account_id = a.id
+       GROUP BY a.id
+       ORDER BY a.created_at DESC`
+    ).all()
     return NextResponse.json({ accounts })
   } catch (error) {
     console.error('Error fetching accounts:', error)
