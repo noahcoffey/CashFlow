@@ -42,6 +42,11 @@ export interface Tag {
   usage_count?: number
 }
 
+export interface AccountWithBalance extends Account {
+  balance: number
+  transaction_count: number
+}
+
 // Joined/enriched types returned by API
 export interface TransactionWithDetails extends Transaction {
   category_name: string | null

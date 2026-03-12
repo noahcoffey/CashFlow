@@ -54,6 +54,7 @@ interface DashboardData {
   accountBalances: { name: string; type: string; balance: number }[]
   cashFlowByMonth: { month: string; income: number; expenses: number }[]
   budgetUtilization: { category_name: string; category_color: string; category_icon: string; spent: number; budgeted: number }[]
+  uncategorizedCount: number
 }
 
 interface Bill {
@@ -114,7 +115,15 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold text-zinc-100">Dashboard</h1>
           <p className="text-zinc-500 text-sm">Your financial overview</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {data.uncategorizedCount > 0 && (
+            <Link href="/transactions?category=uncategorized">
+              <Badge variant="secondary" className="cursor-pointer hover:bg-zinc-700 text-amber-400 border border-amber-400/30">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                {data.uncategorizedCount} uncategorized
+              </Badge>
+            </Link>
+          )}
           <Link href="/import">
             <Button variant="outline" size="sm">
               <Upload className="h-4 w-4 mr-1" /> Import
