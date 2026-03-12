@@ -198,6 +198,35 @@ export const deleteAliasSchema = z.object({
   id: uuid,
 })
 
+// Import schemas
+const importTransactionSchema = z.object({
+  date: z.string().min(1, 'Transaction date is required'),
+  amount: z.number().finite('Amount must be a finite number'),
+  raw_description: z.string().min(1, 'Description is required'),
+})
+
+export const importBodySchema = z.object({
+  accountId: uuid,
+  transactions: z.array(importTransactionSchema)
+    .min(1, 'At least one transaction is required')
+    .max(5000, 'Import limited to 5000 transactions per request'),
+})
+
+// AI query schema
+export const aiQuerySchema = z.object({
+  question: z.string().min(1, 'A question is required').max(2000),
+})
+
+// AI forecast response schema
+export const aiForecastItemSchema = z.object({
+  category: z.string(),
+  projected_amount: z.number(),
+  confidence: z.enum(['high', 'medium', 'low']),
+  reasoning: z.string(),
+})
+
+export const aiForecastResponseSchema = z.array(aiForecastItemSchema)
+
 // Reconciliation schemas
 export const createReconciliationSchema = z.object({
   account_id: uuid,

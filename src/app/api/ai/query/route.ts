@@ -2,17 +2,20 @@ import { NextResponse } from 'next/server'
 import { runClaudePrompt } from '@/lib/ai'
 import { getDb } from '@/lib/db'
 import { format, startOfMonth } from 'date-fns'
+import { aiQuerySchema, validateBody } from '@/lib/validation'
 
 export async function POST(request: Request) {
   const routeStart = Date.now()
   console.log('[query] Request received')
   try {
     const db = getDb()
-    const { question } = await request.json()
+    const body = await request.json()
 
-    if (!question || typeof question !== 'string') {
-      return NextResponse.json({ error: 'A question is required' }, { status: 400 })
+    const validation = validateBody(aiQuerySchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
+    const { question } = validation.data
 
     console.log(`[query] Question: ${question.substring(0, 100)}`)
 
@@ -76,9 +79,9 @@ Provide a clear, concise, and helpful answer. If the data doesn't contain enough
     const elapsed = ((Date.now() - routeStart) / 1000).toFixed(1)
     console.log(`[query] Done in ${elapsed}s (response: ${response.length} chars)`)
     return NextResponse.json({ answer: response })
-  } catch (error: any) {
+  } catch (error: unknown) {
     const elapsed = ((Date.now() - routeStart) / 1000).toFixed(1)
-    if (error.message === 'CLAUDE_NOT_FOUND') {
+    if (error instanceof Error && error.message === 'CLAUDE_NOT_FOUND') {
       console.error(`[query] Claude CLI not found (${elapsed}s)`)
       return NextResponse.json({ error: 'CLAUDE_NOT_FOUND' }, { status: 503 })
     }

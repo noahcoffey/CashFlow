@@ -93,12 +93,12 @@ describe('route source contains size limits', () => {
     expect(source).toContain('ids.length > MAX_BULK_SIZE')
   })
 
-  it('import route defines MAX_IMPORT_SIZE = 5000', () => {
+  it('import route uses Zod schema for size validation', () => {
     const source = fs.readFileSync(
       path.resolve(__dirname, '../../app/api/import/route.ts'),
       'utf-8'
     )
-    expect(source).toContain('MAX_IMPORT_SIZE = 5000')
-    expect(source).toContain('transactions.length > MAX_IMPORT_SIZE')
+    expect(source).toContain('importBodySchema')
+    expect(source).toContain('validateBody')
   })
 })

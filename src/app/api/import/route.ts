@@ -3,21 +3,18 @@ import { getDb } from '@/lib/db'
 import { applyAliasesToTransactions } from '@/lib/alias-engine'
 import { applyRulesToTransactions } from '@/lib/rules-engine'
 import { parseDate } from '@/lib/csv-parser'
-
-const MAX_IMPORT_SIZE = 5000
+import { importBodySchema, validateBody } from '@/lib/validation'
 
 export async function POST(request: Request) {
   try {
     const db = getDb()
-    const { accountId, transactions } = await request.json()
+    const body = await request.json()
 
-    if (!accountId || !Array.isArray(transactions) || transactions.length === 0) {
-      return NextResponse.json({ error: 'accountId and transactions array are required' }, { status: 400 })
+    const validation = validateBody(importBodySchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
-
-    if (transactions.length > MAX_IMPORT_SIZE) {
-      return NextResponse.json({ error: `Import limited to ${MAX_IMPORT_SIZE} transactions per request` }, { status: 400 })
-    }
+    const { accountId, transactions } = validation.data
 
     const account = db.prepare('SELECT id FROM accounts WHERE id = ?').get(accountId)
     if (!account) {
