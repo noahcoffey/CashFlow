@@ -1,5 +1,26 @@
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
+import { validateBody, completeReconciliationSchema } from '@/lib/validation'
+
+interface ReconciliationSession {
+  id: string
+  account_id: string
+  statement_date: string
+  statement_balance: number
+  status: string
+  created_at: string
+  account_name: string
+}
+
+interface TransactionRow {
+  id: string
+  amount: number
+  date: string
+  raw_description: string
+  display_name: string
+  category_name: string | null
+  category_color: string | null
+}
 
 export async function GET(
   request: Request,
@@ -14,23 +35,22 @@ export async function GET(
        FROM reconciliation_sessions rs
        JOIN accounts a ON rs.account_id = a.id
        WHERE rs.id = ?`
-    ).get(id) as any
+    ).get(id) as ReconciliationSession | undefined
 
     if (!session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
-    // Get transactions for this account up to the statement date
     const transactions = db.prepare(
       `SELECT t.*, c.name as category_name, c.color as category_color
        FROM transactions t
        LEFT JOIN categories c ON t.category_id = c.id
        WHERE t.account_id = ? AND t.date <= ?
        ORDER BY t.date DESC`
-    ).all(session.account_id, session.statement_date)
+    ).all(session.account_id, session.statement_date) as TransactionRow[]
 
-    const calculatedBalance = (transactions as any[]).reduce(
-      (sum: number, t: any) => sum + t.amount, 0
+    const calculatedBalance = transactions.reduce(
+      (sum, t) => sum + t.amount, 0
     )
 
     return NextResponse.json({
@@ -53,19 +73,22 @@ export async function PUT(
     const { id } = await params
     const db = getDb()
 
-    const session = db.prepare('SELECT * FROM reconciliation_sessions WHERE id = ?').get(id) as any
+    const session = db.prepare('SELECT * FROM reconciliation_sessions WHERE id = ?').get(id) as ReconciliationSession | undefined
     if (!session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
-    const { status, clearedIds } = await request.json()
+    const body = await request.json()
+    const parsed = validateBody(completeReconciliationSchema, body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status })
+    }
+    const { status, clearedIds } = parsed.data
 
-    // Mark session as completed
     db.prepare(
       "UPDATE reconciliation_sessions SET status = ? WHERE id = ?"
-    ).run(status || 'completed', id)
+    ).run(status, id)
 
-    // Mark cleared transactions as reconciled
     if (clearedIds && clearedIds.length > 0) {
       const placeholders = clearedIds.map(() => '?').join(',')
       db.prepare(
