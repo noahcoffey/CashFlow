@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import { applyAliasesToTransactions } from '@/lib/alias-engine'
+import { validateBody, createAliasSchema, updateAliasSchema, deleteAliasSchema } from '@/lib/validation'
 
 export async function GET() {
   try {
@@ -21,16 +22,17 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const db = getDb()
-    const { raw_pattern, display_name, category_id, apply_retroactively } = await request.json()
-
-    if (!raw_pattern || !display_name) {
-      return NextResponse.json({ error: 'raw_pattern and display_name are required' }, { status: 400 })
+    const body = await request.json()
+    const parsed = validateBody(createAliasSchema, body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status })
     }
+    const { raw_pattern, display_name, category_id, apply_retroactively } = parsed.data
 
     const id = crypto.randomUUID()
     db.prepare(
       'INSERT INTO merchant_aliases (id, raw_pattern, display_name, category_id) VALUES (?, ?, ?, ?)'
-    ).run(id, raw_pattern, display_name, category_id || null)
+    ).run(id, raw_pattern, display_name, category_id ?? null)
 
     let retroactiveResult = null
     if (apply_retroactively) {
@@ -57,11 +59,12 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const db = getDb()
-    const { id, raw_pattern, display_name, category_id } = await request.json()
-
-    if (!id) {
-      return NextResponse.json({ error: 'Alias id is required' }, { status: 400 })
+    const body = await request.json()
+    const parsed = validateBody(updateAliasSchema, body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status })
     }
+    const { id, raw_pattern, display_name, category_id } = parsed.data
 
     db.prepare(
       `UPDATE merchant_aliases SET
@@ -69,7 +72,7 @@ export async function PUT(request: Request) {
         display_name = COALESCE(?, display_name),
         category_id = ?
        WHERE id = ?`
-    ).run(raw_pattern || null, display_name || null, category_id !== undefined ? (category_id || null) : null, id)
+    ).run(raw_pattern ?? null, display_name ?? null, category_id !== undefined ? (category_id ?? null) : null, id)
 
     const updated = db.prepare(
       `SELECT ma.*, c.name as category_name, c.color as category_color, c.icon as category_icon
@@ -88,11 +91,12 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const db = getDb()
-    const { id } = await request.json()
-
-    if (!id) {
-      return NextResponse.json({ error: 'Alias id is required' }, { status: 400 })
+    const body = await request.json()
+    const parsed = validateBody(deleteAliasSchema, body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status })
     }
+    const { id } = parsed.data
 
     const result = db.prepare('DELETE FROM merchant_aliases WHERE id = ?').run(id)
     if (result.changes === 0) {

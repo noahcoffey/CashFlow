@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
+import { validateBody, createTagSchema, updateTagSchema, deleteTagSchema } from '@/lib/validation'
 
 export async function GET() {
   try {
@@ -21,19 +22,20 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const db = getDb()
-    const { name, color } = await request.json()
-
-    if (!name) {
-      return NextResponse.json({ error: 'Tag name is required' }, { status: 400 })
+    const body = await request.json()
+    const parsed = validateBody(createTagSchema, body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status })
     }
+    const { name, color } = parsed.data
 
     const id = crypto.randomUUID()
-    db.prepare('INSERT INTO tags (id, name, color) VALUES (?, ?, ?)').run(id, name, color || '#6B7280')
+    db.prepare('INSERT INTO tags (id, name, color) VALUES (?, ?, ?)').run(id, name, color)
 
     const tag = db.prepare('SELECT * FROM tags WHERE id = ?').get(id)
     return NextResponse.json({ tag }, { status: 201 })
-  } catch (error: any) {
-    if (error.message?.includes('UNIQUE constraint')) {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message?.includes('UNIQUE constraint')) {
       return NextResponse.json({ error: 'Tag name already exists' }, { status: 409 })
     }
     console.error('Error creating tag:', error)
@@ -44,15 +46,16 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const db = getDb()
-    const { id, name, color } = await request.json()
-
-    if (!id) {
-      return NextResponse.json({ error: 'Tag id is required' }, { status: 400 })
+    const body = await request.json()
+    const parsed = validateBody(updateTagSchema, body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status })
     }
+    const { id, name, color } = parsed.data
 
     db.prepare(
       'UPDATE tags SET name = COALESCE(?, name), color = COALESCE(?, color) WHERE id = ?'
-    ).run(name || null, color || null, id)
+    ).run(name ?? null, color ?? null, id)
 
     const tag = db.prepare('SELECT * FROM tags WHERE id = ?').get(id)
     return NextResponse.json({ tag })
@@ -65,11 +68,12 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const db = getDb()
-    const { id } = await request.json()
-
-    if (!id) {
-      return NextResponse.json({ error: 'Tag id is required' }, { status: 400 })
+    const body = await request.json()
+    const parsed = validateBody(deleteTagSchema, body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status })
     }
+    const { id } = parsed.data
 
     const result = db.prepare('DELETE FROM tags WHERE id = ?').run(id)
     if (result.changes === 0) {
