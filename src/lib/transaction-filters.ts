@@ -11,9 +11,10 @@ export function buildTransactionFilters(searchParams: URLSearchParams): {
 
   const search = searchParams.get('search')
   if (search) {
-    conditions.push('(t.raw_description LIKE ? OR t.display_name LIKE ? OR t.notes LIKE ?)')
-    const like = `%${search}%`
-    params.push(like, like, like)
+    // Use FTS5 for fast full-text search; escape double quotes in search term
+    const escaped = search.replace(/"/g, '""')
+    conditions.push('t.rowid IN (SELECT rowid FROM transactions_fts WHERE transactions_fts MATCH ?)')
+    params.push(`"${escaped}"`)
   }
 
   const accountId = searchParams.get('accountId')
