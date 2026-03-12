@@ -11,13 +11,11 @@ describe('buildTransactionFilters', () => {
     expect(result.params).toEqual([])
   })
 
-  it('builds search filter with LIKE on three columns', () => {
+  it('builds search filter with FTS5 MATCH', () => {
     const params = new URLSearchParams({ search: 'coffee' })
     const result = buildTransactionFilters(params)
-    expect(result.whereClause).toContain('t.raw_description LIKE ?')
-    expect(result.whereClause).toContain('t.display_name LIKE ?')
-    expect(result.whereClause).toContain('t.notes LIKE ?')
-    expect(result.params).toEqual(['%coffee%', '%coffee%', '%coffee%'])
+    expect(result.whereClause).toContain('transactions_fts MATCH ?')
+    expect(result.params).toEqual(['"coffee"'])
   })
 
   it('builds accountId filter', () => {
@@ -74,7 +72,7 @@ describe('buildTransactionFilters', () => {
     const params = new URLSearchParams({ search: 'food', accountId: 'acc-1', startDate: '2025-01-01' })
     const result = buildTransactionFilters(params)
     expect(result.whereClause).toMatch(/^WHERE .+ AND .+ AND .+$/)
-    expect(result.params.length).toBe(5) // 3 for search + 1 accountId + 1 date
+    expect(result.params.length).toBe(3) // 1 for FTS search + 1 accountId + 1 date
   })
 
   it('returns properly typed params (no any[])', () => {

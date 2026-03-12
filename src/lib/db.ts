@@ -181,7 +181,39 @@ export function initializeSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_merchant_aliases_pattern ON merchant_aliases(raw_pattern);
     CREATE INDEX IF NOT EXISTS idx_scheduled_bills_next_due ON scheduled_bills(next_due_date);
     CREATE INDEX IF NOT EXISTS idx_scheduled_bills_active ON scheduled_bills(is_active, next_due_date);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS transactions_fts USING fts5(
+      raw_description,
+      display_name,
+      notes,
+      content='transactions',
+      content_rowid='rowid'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS transactions_ai AFTER INSERT ON transactions BEGIN
+      INSERT INTO transactions_fts(rowid, raw_description, display_name, notes)
+      VALUES (NEW.rowid, NEW.raw_description, NEW.display_name, NEW.notes);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS transactions_ad AFTER DELETE ON transactions BEGIN
+      INSERT INTO transactions_fts(transactions_fts, rowid, raw_description, display_name, notes)
+      VALUES ('delete', OLD.rowid, OLD.raw_description, OLD.display_name, OLD.notes);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS transactions_au AFTER UPDATE ON transactions BEGIN
+      INSERT INTO transactions_fts(transactions_fts, rowid, raw_description, display_name, notes)
+      VALUES ('delete', OLD.rowid, OLD.raw_description, OLD.display_name, OLD.notes);
+      INSERT INTO transactions_fts(rowid, raw_description, display_name, notes)
+      VALUES (NEW.rowid, NEW.raw_description, NEW.display_name, NEW.notes);
+    END;
   `)
+
+  // Rebuild FTS index from existing data (no-op if already populated)
+  const ftsCount = db.prepare('SELECT COUNT(*) as count FROM transactions_fts').get() as { count: number }
+  const txnCount = db.prepare('SELECT COUNT(*) as count FROM transactions').get() as { count: number }
+  if (ftsCount.count === 0 && txnCount.count > 0) {
+    db.exec(`INSERT INTO transactions_fts(transactions_fts) VALUES('rebuild')`)
+  }
 
   // Seed default categories if empty
   const count = db.prepare('SELECT COUNT(*) as count FROM categories').get() as { count: number }
