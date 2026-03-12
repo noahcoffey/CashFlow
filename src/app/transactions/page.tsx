@@ -252,40 +252,78 @@ export default function TransactionsPage() {
 
   const bulkCategorize = async () => {
     if (!bulkCategoryId || selected.size === 0) return
-    await fetch("/api/transactions/bulk", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: Array.from(selected), category_id: bulkCategoryId }),
-    })
+    const count = selected.size
+    const ids = Array.from(selected)
+    const prev = transactions
+    const cat = categories.find(c => c.id === bulkCategoryId)
+    setTransactions(t => t.map(txn =>
+      selected.has(txn.id)
+        ? { ...txn, category_id: bulkCategoryId, category_name: cat?.name || null, category_icon: cat?.icon || null, category_color: cat?.color || null }
+        : txn
+    ))
     setSelected(new Set())
     setShowBulk(false)
-    fetchTransactions()
-    toast.success(`${selected.size} transactions categorized`)
+    toast.success(`${count} transactions categorized`)
+
+    try {
+      const res = await fetch("/api/transactions/bulk", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, category_id: bulkCategoryId }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setTransactions(prev)
+      toast.error("Failed to categorize transactions")
+    }
   }
 
   const deleteTransaction = async (id: string) => {
-    await fetch("/api/transactions", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    })
+    const prev = transactions
+    const prevTotal = total
+    setTransactions(t => t.filter(txn => txn.id !== id))
+    setTotal(t => t - 1)
     setEditingId(null)
     setEditingTxn(null)
-    fetchTransactions()
     toast.success("Transaction deleted")
+
+    try {
+      const res = await fetch("/api/transactions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setTransactions(prev)
+      setTotal(prevTotal)
+      toast.error("Failed to delete transaction")
+    }
   }
 
   const bulkDelete = async () => {
     if (selected.size === 0) return
     const count = selected.size
-    await fetch("/api/transactions/bulk", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: Array.from(selected) }),
-    })
+    const ids = Array.from(selected)
+    const prev = transactions
+    const prevTotal = total
+    setTransactions(t => t.filter(txn => !selected.has(txn.id)))
+    setTotal(t => t - count)
     setSelected(new Set())
-    fetchTransactions()
     toast.success(`${count} transactions deleted`)
+
+    try {
+      const res = await fetch("/api/transactions/bulk", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setTransactions(prev)
+      setTotal(prevTotal)
+      toast.error("Failed to delete transactions")
+    }
   }
 
   const saveSplits = async () => {
@@ -382,27 +420,61 @@ export default function TransactionsPage() {
 
   const bulkTag = async (tagId: string) => {
     if (selected.size === 0) return
-    await fetch("/api/transactions/tags", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ transaction_ids: Array.from(selected), tag_id: tagId }),
-    })
+    const count = selected.size
+    const ids = Array.from(selected)
+    const prev = transactions
+    const tag = tags.find(t => t.id === tagId)
+    if (tag) {
+      setTransactions(t => t.map(txn =>
+        selected.has(txn.id) && !txn.tags?.some(t => t.id === tagId)
+          ? { ...txn, tags: [...(txn.tags || []), tag] }
+          : txn
+      ))
+    }
     setSelected(new Set())
-    fetchTransactions()
-    toast.success(`Tagged ${selected.size} transactions`)
+    toast.success(`Tagged ${count} transactions`)
+
+    try {
+      const res = await fetch("/api/transactions/tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transaction_ids: ids, tag_id: tagId }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setTransactions(prev)
+      toast.error("Failed to tag transactions")
+    }
   }
 
   const toggleTag = async (txnId: string, tagId: string, hasTag: boolean) => {
-    await fetch("/api/transactions/tags", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        transaction_ids: [txnId],
-        tag_id: tagId,
-        action: hasTag ? "remove" : "add",
-      }),
-    })
-    fetchTransactions()
+    const prev = transactions
+    const tag = tags.find(t => t.id === tagId)
+    setTransactions(t => t.map(txn => {
+      if (txn.id !== txnId) return txn
+      return {
+        ...txn,
+        tags: hasTag
+          ? (txn.tags || []).filter(t => t.id !== tagId)
+          : [...(txn.tags || []), ...(tag ? [tag] : [])],
+      }
+    }))
+
+    try {
+      const res = await fetch("/api/transactions/tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transaction_ids: [txnId],
+          tag_id: tagId,
+          action: hasTag ? "remove" : "add",
+        }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setTransactions(prev)
+      toast.error("Failed to update tag")
+    }
   }
 
   const exportCSV = () => {
