@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/utils"
+import { BUDGET_WARNING_THRESHOLD, BUDGET_OVER_THRESHOLD } from "@/lib/constants"
 import { Plus, Edit2, Trash2, TrendingUp, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
 
@@ -291,7 +292,7 @@ export default function BudgetsPage() {
                       <div className="flex items-center gap-2">
                         <span>{b.category_icon}</span>
                         <span className="font-medium text-zinc-200">{b.category_name}</span>
-                        <Badge variant={pct > 100 ? "destructive" : pct > 75 ? "warning" : "success"} className="text-xs">
+                        <Badge variant={pct > BUDGET_OVER_THRESHOLD ? "destructive" : pct > BUDGET_WARNING_THRESHOLD ? "warning" : "success"} className="text-xs">
                           {pct.toFixed(0)}%
                         </Badge>
                       </div>

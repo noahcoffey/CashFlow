@@ -8,6 +8,7 @@ import { Select } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { formatCurrency, formatDate } from "@/lib/utils"
+import { RECONCILIATION_TOLERANCE } from "@/lib/constants"
 import { CheckSquare, Lock, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 
@@ -185,10 +186,10 @@ export default function ReconcilePage() {
             <Card>
               <CardContent className="p-6">
                 <p className="text-sm text-zinc-400">Difference</p>
-                <p className={`text-2xl font-bold mt-1 ${Math.abs(difference) < 0.01 ? 'text-emerald-400' : 'text-red-400'}`}>
+                <p className={`text-2xl font-bold mt-1 ${Math.abs(difference) < RECONCILIATION_TOLERANCE ? 'text-emerald-400' : 'text-red-400'}`}>
                   {formatCurrency(difference)}
                 </p>
-                {Math.abs(difference) < 0.01 && (
+                {Math.abs(difference) < RECONCILIATION_TOLERANCE && (
                   <Badge variant="success" className="mt-1">Balanced!</Badge>
                 )}
               </CardContent>
@@ -201,7 +202,7 @@ export default function ReconcilePage() {
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={clearAll}>Clear All</Button>
                 <Button variant="outline" size="sm" onClick={() => { setActiveSession(null); setTransactions([]) }}>Cancel</Button>
-                <Button size="sm" onClick={finishReconciliation} disabled={Math.abs(difference) >= 0.01} variant="success">
+                <Button size="sm" onClick={finishReconciliation} disabled={Math.abs(difference) >= RECONCILIATION_TOLERANCE} variant="success">
                   <Lock className="h-4 w-4 mr-1" /> Finish
                 </Button>
               </div>
