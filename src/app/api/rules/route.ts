@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import { applyRulesToTransactions } from '@/lib/rules-engine'
 import { validateBody, createRuleSchema, updateRuleSchema, deleteRuleSchema } from '@/lib/validation'
+import { safeParseJSON } from '@/lib/utils'
 
 interface RuleRow {
   id: string
@@ -14,14 +15,6 @@ interface RuleRow {
   created_at: string
   category_name: string | null
   category_icon: string | null
-}
-
-function safeParseJSON(json: string, fallback: unknown[] = []): unknown {
-  try {
-    return JSON.parse(json)
-  } catch {
-    return fallback
-  }
 }
 
 export async function GET() {

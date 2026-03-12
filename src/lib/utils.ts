@@ -20,3 +20,11 @@ export function formatDate(date: string | Date): string {
 export function generateId(): string {
   return crypto.randomUUID()
 }
+
+export function safeParseJSON(json: string, fallback: unknown[] = []): unknown {
+  try {
+    return JSON.parse(json)
+  } catch {
+    return fallback
+  }
+}
