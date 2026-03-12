@@ -65,6 +65,63 @@ export const createBudgetSchema = z.object({
   end_date: dateString.nullable().optional(),
 })
 
+// Category schemas
+export const createCategorySchema = z.object({
+  name: z.string().min(1, 'Category name is required').max(200),
+  type: z.enum(['income', 'expense', 'transfer'], {
+    message: 'Type must be income, expense, or transfer',
+  }),
+  parent_id: z.string().nullable().optional(),
+  color: z.string().max(20).default('#6B7280'),
+  icon: z.string().max(10).default('📁'),
+  budget_amount: z.number().nonnegative().default(0),
+  budget_period: z.enum(['monthly', 'weekly', 'annual'], {
+    message: 'Period must be monthly, weekly, or annual',
+  }).default('monthly'),
+})
+
+export const updateCategorySchema = z.object({
+  id: uuid,
+  name: z.string().min(1).max(200).optional(),
+  type: z.enum(['income', 'expense', 'transfer']).optional(),
+  parent_id: z.string().nullable().optional(),
+  color: z.string().max(20).optional(),
+  icon: z.string().max(10).optional(),
+  budget_amount: z.number().nonnegative().optional(),
+  budget_period: z.enum(['monthly', 'weekly', 'annual']).optional(),
+})
+
+export const deleteCategorySchema = z.object({
+  id: uuid,
+})
+
+// Bill schemas
+export const createBillSchema = z.object({
+  name: z.string().min(1, 'Bill name is required').max(200),
+  amount: currencyAmount,
+  frequency: z.enum(['weekly', 'biweekly', 'monthly', 'quarterly', 'annual'], {
+    message: 'Frequency must be weekly, biweekly, monthly, quarterly, or annual',
+  }),
+  next_due_date: dateString,
+  category_id: z.string().nullable().optional(),
+  account_id: z.string().nullable().optional(),
+})
+
+export const updateBillSchema = z.object({
+  id: uuid,
+  name: z.string().min(1).max(200).optional(),
+  amount: currencyAmount.optional(),
+  frequency: z.enum(['weekly', 'biweekly', 'monthly', 'quarterly', 'annual']).optional(),
+  next_due_date: dateString.optional(),
+  category_id: z.string().nullable().optional(),
+  account_id: z.string().nullable().optional(),
+  is_active: z.union([z.literal(0), z.literal(1)]).optional(),
+})
+
+export const deleteBillSchema = z.object({
+  id: uuid,
+})
+
 /**
  * Validate request body against a Zod schema.
  * Returns { data } on success or { error, status } on failure.

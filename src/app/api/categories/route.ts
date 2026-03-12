@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
+import { createCategorySchema, updateCategorySchema, deleteCategorySchema, validateBody } from '@/lib/validation'
 
 export async function GET() {
   try {
@@ -20,17 +21,18 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const db = getDb()
-    const { name, parent_id, color, icon, type, budget_amount, budget_period } = await request.json()
-
-    if (!name || !type) {
-      return NextResponse.json({ error: 'Name and type are required' }, { status: 400 })
+    const body = await request.json()
+    const validation = validateBody(createCategorySchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
     }
+    const { name, parent_id, color, icon, type, budget_amount, budget_period } = validation.data
 
     const id = crypto.randomUUID()
     db.prepare(
       `INSERT INTO categories (id, name, parent_id, color, icon, type, budget_amount, budget_period)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, name, parent_id || null, color || '#6B7280', icon || '📁', type, budget_amount || 0, budget_period || 'monthly')
+    ).run(id, name, parent_id || null, color, icon, type, budget_amount, budget_period)
 
     const category = db.prepare(
       `SELECT c.*, p.name as parent_name
@@ -49,11 +51,12 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const db = getDb()
-    const { id, name, parent_id, color, icon, type, budget_amount, budget_period } = await request.json()
-
-    if (!id) {
-      return NextResponse.json({ error: 'Category id is required' }, { status: 400 })
+    const body = await request.json()
+    const validation = validateBody(updateCategorySchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
     }
+    const { id, name, parent_id, color, icon, type, budget_amount, budget_period } = validation.data
 
     const existing = db.prepare('SELECT * FROM categories WHERE id = ?').get(id)
     if (!existing) {
@@ -98,13 +101,13 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const db = getDb()
-    const { id } = await request.json()
-
-    if (!id) {
-      return NextResponse.json({ error: 'Category id is required' }, { status: 400 })
+    const body = await request.json()
+    const validation = validateBody(deleteCategorySchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
     }
 
-    const result = db.prepare('DELETE FROM categories WHERE id = ?').run(id)
+    const result = db.prepare('DELETE FROM categories WHERE id = ?').run(validation.data.id)
     if (result.changes === 0) {
       return NextResponse.json({ error: 'Category not found' }, { status: 404 })
     }
