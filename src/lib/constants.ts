@@ -10,3 +10,6 @@ export const RECURRING_CONFIDENCE_THRESHOLD = 0.8
 
 /** Minimum similarity score for alias engine to match a transaction description */
 export const ALIAS_MATCH_THRESHOLD = 0.5
+
+/** Maximum number of rows allowed in a CSV export */
+export const MAX_EXPORT_SIZE = 10000
