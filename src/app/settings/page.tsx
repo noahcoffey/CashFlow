@@ -14,6 +14,7 @@ import { toast } from "sonner"
 
 interface Account {
   id: string; name: string; type: string; institution: string; currency: string; created_at: string;
+  balance: number; transaction_count: number;
 }
 
 interface Alias {
@@ -474,6 +475,9 @@ export default function SettingsPage() {
                     <p className="text-xs text-zinc-500">{acc.institution || "No institution"} &middot; {acc.currency}</p>
                   </div>
                   <div className="flex items-center gap-2">
+                    <span className={`text-sm font-medium tabular-nums ${acc.balance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {acc.balance < 0 ? '-' : ''}${Math.abs(acc.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
                     <Badge variant="secondary" className="capitalize">{acc.type}</Badge>
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => editAccount(acc)} aria-label={`Edit ${acc.name}`}>
                       <Edit2 className="h-3 w-3" aria-hidden="true" />
