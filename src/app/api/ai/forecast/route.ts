@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { runClaudePrompt, extractJSON } from '@/lib/ai'
 import { getDb } from '@/lib/db'
 import { subMonths, format, startOfMonth } from 'date-fns'
+import { aiForecastResponseSchema } from '@/lib/validation'
 
 export async function GET(request: Request) {
   const routeStart = Date.now()
@@ -75,19 +76,25 @@ Respond ONLY with valid JSON, no other text. Use this exact format:
       return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
     }
 
-    console.log(`[forecast] Got ${Array.isArray(result) ? result.length : 'object'} results, caching`)
+    const validated = aiForecastResponseSchema.safeParse(result)
+    if (!validated.success) {
+      console.error('[forecast] AI response failed schema validation:', validated.error.issues)
+      return NextResponse.json({ error: 'AI response did not match expected format' }, { status: 500 })
+    }
 
-    // Cache the result
+    console.log(`[forecast] Got ${validated.data.length} results, caching`)
+
+    // Cache the validated result
     db.prepare(
       `INSERT INTO ai_cache (id, type, result) VALUES (?, 'forecast', ?)`
-    ).run(crypto.randomUUID(), JSON.stringify(result))
+    ).run(crypto.randomUUID(), JSON.stringify(validated.data))
 
     const elapsed = ((Date.now() - routeStart) / 1000).toFixed(1)
     console.log(`[forecast] Done in ${elapsed}s`)
-    return NextResponse.json(result)
-  } catch (error: any) {
+    return NextResponse.json(validated.data)
+  } catch (error: unknown) {
     const elapsed = ((Date.now() - routeStart) / 1000).toFixed(1)
-    if (error.message === 'CLAUDE_NOT_FOUND') {
+    if (error instanceof Error && error.message === 'CLAUDE_NOT_FOUND') {
       console.error(`[forecast] Claude CLI not found (${elapsed}s)`)
       return NextResponse.json({ error: 'CLAUDE_NOT_FOUND' }, { status: 503 })
     }
