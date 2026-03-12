@@ -1,20 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import { createTransactionSchema, updateTransactionSchema, deleteTransactionSchema, validateBody } from '@/lib/validation'
+import { buildTransactionFilters } from '@/lib/transaction-filters'
 
 export async function GET(request: NextRequest) {
   try {
     const db = getDb()
     const { searchParams } = new URL(request.url)
 
-    const search = searchParams.get('search')
-    const accountId = searchParams.get('accountId')
-    const categoryId = searchParams.get('categoryId')
-    const startDate = searchParams.get('startDate')
-    const endDate = searchParams.get('endDate')
-    const isReconciled = searchParams.get('isReconciled')
-    const minAmount = searchParams.get('minAmount')
-    const maxAmount = searchParams.get('maxAmount')
     const rawPage = parseInt(searchParams.get('page') || '1')
     const rawLimit = parseInt(searchParams.get('limit') || '50')
 
@@ -26,50 +19,7 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(Math.max(1, rawLimit), 500)
     const offset = (page - 1) * limit
 
-    const conditions: string[] = []
-    const params: any[] = []
-
-    if (search) {
-      conditions.push('(t.raw_description LIKE ? OR t.display_name LIKE ? OR t.notes LIKE ?)')
-      const like = `%${search}%`
-      params.push(like, like, like)
-    }
-    if (accountId) {
-      conditions.push('t.account_id = ?')
-      params.push(accountId)
-    }
-    if (categoryId) {
-      conditions.push('t.category_id = ?')
-      params.push(categoryId)
-    }
-    if (startDate) {
-      conditions.push('t.date >= ?')
-      params.push(startDate)
-    }
-    if (endDate) {
-      conditions.push('t.date <= ?')
-      params.push(endDate)
-    }
-    if (isReconciled !== null && isReconciled !== undefined && isReconciled !== '') {
-      conditions.push('t.is_reconciled = ?')
-      params.push(isReconciled === 'true' ? 1 : 0)
-    }
-    if (minAmount) {
-      conditions.push('t.amount >= ?')
-      params.push(parseFloat(minAmount))
-    }
-    if (maxAmount) {
-      conditions.push('t.amount <= ?')
-      params.push(parseFloat(maxAmount))
-    }
-
-    const tagId = searchParams.get('tagId')
-    if (tagId) {
-      conditions.push('t.id IN (SELECT transaction_id FROM transaction_tags WHERE tag_id = ?)')
-      params.push(tagId)
-    }
-
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+    const { whereClause, params } = buildTransactionFilters(searchParams)
 
     const countResult = db.prepare(
       `SELECT COUNT(*) as total FROM transactions t ${whereClause}`
