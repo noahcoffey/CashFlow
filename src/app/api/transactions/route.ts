@@ -25,38 +25,25 @@ export async function GET(request: NextRequest) {
       `SELECT COUNT(*) as total FROM transactions t ${whereClause}`
     ).get(...params) as { total: number }
 
-    const transactions = db.prepare(
+    const rawTransactions = db.prepare(
       `SELECT t.*, c.name as category_name, c.color as category_color, c.icon as category_icon,
-              a.name as account_name
+              a.name as account_name,
+              (SELECT json_group_array(json_object('id', tg.id, 'name', tg.name, 'color', tg.color))
+               FROM transaction_tags tt
+               JOIN tags tg ON tt.tag_id = tg.id
+               WHERE tt.transaction_id = t.id) as tags_json
        FROM transactions t
        LEFT JOIN categories c ON t.category_id = c.id
        LEFT JOIN accounts a ON t.account_id = a.id
        ${whereClause}
        ORDER BY t.date DESC, t.created_at DESC
        LIMIT ? OFFSET ?`
-    ).all(...params, limit, offset)
+    ).all(...params, limit, offset) as Array<Record<string, unknown> & { tags_json: string }>
 
-    // Attach tags to each transaction
-    const txnIds = (transactions as any[]).map(t => t.id)
-    if (txnIds.length > 0) {
-      const placeholders = txnIds.map(() => '?').join(',')
-      const tagRows = db.prepare(
-        `SELECT tt.transaction_id, tg.id, tg.name, tg.color
-         FROM transaction_tags tt
-         JOIN tags tg ON tt.tag_id = tg.id
-         WHERE tt.transaction_id IN (${placeholders})`
-      ).all(...txnIds) as Array<{ transaction_id: string; id: string; name: string; color: string }>
-
-      const tagMap = new Map<string, Array<{ id: string; name: string; color: string }>>()
-      for (const row of tagRows) {
-        const list = tagMap.get(row.transaction_id) || []
-        list.push({ id: row.id, name: row.name, color: row.color })
-        tagMap.set(row.transaction_id, list)
-      }
-      for (const txn of transactions as any[]) {
-        txn.tags = tagMap.get(txn.id) || []
-      }
-    }
+    const transactions = rawTransactions.map(({ tags_json, ...rest }) => ({
+      ...rest,
+      tags: tags_json ? JSON.parse(tags_json).filter((t: { id: string | null }) => t.id !== null) : [],
+    }))
 
     return NextResponse.json({
       transactions,
