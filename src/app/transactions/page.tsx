@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useDebounce } from "@/hooks/use-debounce"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -125,6 +125,8 @@ export default function TransactionsPage() {
   const [showTagDialog, setShowTagDialog] = useState(false)
   const [newTagName, setNewTagName] = useState("")
   const [newTagColor, setNewTagColor] = useState("#6B7280")
+
+  const pendingDeleteRef = useRef<{ timer: ReturnType<typeof setTimeout>; toastId: string | number } | null>(null)
 
   const limit = 25
 
@@ -278,31 +280,65 @@ export default function TransactionsPage() {
     }
   }
 
-  const deleteTransaction = async (id: string) => {
+  const deleteTransaction = (id: string) => {
+    // Cancel any pending delete
+    if (pendingDeleteRef.current) {
+      clearTimeout(pendingDeleteRef.current.timer)
+      toast.dismiss(pendingDeleteRef.current.toastId)
+      pendingDeleteRef.current = null
+    }
+
     const prev = transactions
     const prevTotal = total
     setTransactions(t => t.filter(txn => txn.id !== id))
     setTotal(t => t - 1)
     setEditingId(null)
     setEditingTxn(null)
-    toast.success("Transaction deleted")
 
-    try {
-      const res = await fetch("/api/transactions", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      })
-      if (!res.ok) throw new Error()
-    } catch {
-      setTransactions(prev)
-      setTotal(prevTotal)
-      toast.error("Failed to delete transaction")
-    }
+    const toastId = toast("Transaction deleted", {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          if (pendingDeleteRef.current) {
+            clearTimeout(pendingDeleteRef.current.timer)
+            pendingDeleteRef.current = null
+          }
+          setTransactions(prev)
+          setTotal(prevTotal)
+          toast.success("Transaction restored")
+        },
+      },
+      duration: 5000,
+    })
+
+    const timer = setTimeout(async () => {
+      pendingDeleteRef.current = null
+      try {
+        const res = await fetch("/api/transactions", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        })
+        if (!res.ok) throw new Error()
+      } catch {
+        setTransactions(prev)
+        setTotal(prevTotal)
+        toast.error("Failed to delete transaction")
+      }
+    }, 5000)
+
+    pendingDeleteRef.current = { timer, toastId }
   }
 
-  const bulkDelete = async () => {
+  const bulkDelete = () => {
     if (selected.size === 0) return
+    // Cancel any pending delete
+    if (pendingDeleteRef.current) {
+      clearTimeout(pendingDeleteRef.current.timer)
+      toast.dismiss(pendingDeleteRef.current.toastId)
+      pendingDeleteRef.current = null
+    }
+
     const count = selected.size
     const ids = Array.from(selected)
     const prev = transactions
@@ -310,20 +346,40 @@ export default function TransactionsPage() {
     setTransactions(t => t.filter(txn => !selected.has(txn.id)))
     setTotal(t => t - count)
     setSelected(new Set())
-    toast.success(`${count} transactions deleted`)
 
-    try {
-      const res = await fetch("/api/transactions/bulk", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
-      })
-      if (!res.ok) throw new Error()
-    } catch {
-      setTransactions(prev)
-      setTotal(prevTotal)
-      toast.error("Failed to delete transactions")
-    }
+    const toastId = toast(`${count} transactions deleted`, {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          if (pendingDeleteRef.current) {
+            clearTimeout(pendingDeleteRef.current.timer)
+            pendingDeleteRef.current = null
+          }
+          setTransactions(prev)
+          setTotal(prevTotal)
+          toast.success(`${count} transactions restored`)
+        },
+      },
+      duration: 5000,
+    })
+
+    const timer = setTimeout(async () => {
+      pendingDeleteRef.current = null
+      try {
+        const res = await fetch("/api/transactions/bulk", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids }),
+        })
+        if (!res.ok) throw new Error()
+      } catch {
+        setTransactions(prev)
+        setTotal(prevTotal)
+        toast.error("Failed to delete transactions")
+      }
+    }, 5000)
+
+    pendingDeleteRef.current = { timer, toastId }
   }
 
   const saveSplits = async () => {
