@@ -69,6 +69,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
   const [bills, setBills] = useState<Bill[]>([])
   const [billsLoading, setBillsLoading] = useState(true)
+  const [billsError, setBillsError] = useState<string | null>(null)
 
   useEffect(() => {
     setError(null)
@@ -81,9 +82,12 @@ export default function DashboardPage() {
       .catch((err) => setError(err.message))
       .finally(() => setDashboardLoading(false))
     fetch("/api/bills")
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error("Failed to load bills")
+        return r.json()
+      })
       .then(d => setBills(d.bills || []))
-      .catch(() => {})
+      .catch((err) => setBillsError(err.message))
       .finally(() => setBillsLoading(false))
   }, [])
 
@@ -456,6 +460,20 @@ export default function DashboardPage() {
               {[...Array(3)].map((_, i) => (
                 <Skeleton key={i} className="h-10 w-full rounded-lg" />
               ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : billsError ? (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CalendarClock className="h-4 w-4" /> Bills This Month
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2 text-sm text-red-400">
+              <AlertCircle className="h-4 w-4" />
+              <span>{billsError}</span>
             </div>
           </CardContent>
         </Card>
