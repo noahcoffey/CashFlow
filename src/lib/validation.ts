@@ -122,6 +122,20 @@ export const deleteBillSchema = z.object({
   id: uuid,
 })
 
+// Reconciliation schemas
+export const createReconciliationSchema = z.object({
+  account_id: uuid,
+  statement_date: dateString,
+  statement_balance: currencyAmount,
+})
+
+export const completeReconciliationSchema = z.object({
+  status: z.enum(['in_progress', 'completed'], {
+    message: 'Status must be in_progress or completed',
+  }).default('completed'),
+  clearedIds: z.array(z.string().min(1)).optional(),
+})
+
 /**
  * Validate request body against a Zod schema.
  * Returns { data } on success or { error, status } on failure.
