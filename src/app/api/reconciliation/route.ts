@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
+import { validateBody, createReconciliationSchema } from '@/lib/validation'
 
 export async function GET() {
   try {
@@ -20,11 +21,12 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const db = getDb()
-    const { account_id, statement_date, statement_balance } = await request.json()
-
-    if (!account_id || !statement_date || statement_balance === undefined) {
-      return NextResponse.json({ error: 'account_id, statement_date, and statement_balance are required' }, { status: 400 })
+    const body = await request.json()
+    const parsed = validateBody(createReconciliationSchema, body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status })
     }
+    const { account_id, statement_date, statement_balance } = parsed.data
 
     const id = crypto.randomUUID()
     db.prepare(
