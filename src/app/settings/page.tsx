@@ -11,11 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { formatDate } from "@/lib/utils"
 import { Plus, Trash2, Edit2, Building2, Tag, RefreshCw, Tags, Zap, Play, Pause, Sparkles, Check, X, Loader2, Download, Upload, HardDrive, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
-
-interface Account {
-  id: string; name: string; type: string; institution: string; currency: string; created_at: string;
-  balance: number; transaction_count: number;
-}
+import type { AccountWithBalance } from "@/lib/types"
 
 interface Alias {
   id: string; raw_pattern: string; display_name: string; category_id: string | null;
@@ -49,12 +45,12 @@ interface Rule {
 }
 
 export default function SettingsPage() {
-  const [accounts, setAccounts] = useState<Account[]>([])
+  const [accounts, setAccounts] = useState<AccountWithBalance[]>([])
   const [aliases, setAliases] = useState<Alias[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [showAccountDialog, setShowAccountDialog] = useState(false)
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null)
-  const [deletingAccount, setDeletingAccount] = useState<Account | null>(null)
+  const [deletingAccount, setDeletingAccount] = useState<AccountWithBalance | null>(null)
   const [showAliasDialog, setShowAliasDialog] = useState(false)
   const [editingAliasId, setEditingAliasId] = useState<string | null>(null)
   const [accountForm, setAccountForm] = useState({ name: "", type: "checking", institution: "", currency: "USD" })
@@ -115,7 +111,7 @@ export default function SettingsPage() {
     toast.success(editingAccountId ? "Account updated" : "Account created")
   }
 
-  const editAccount = (acc: Account) => {
+  const editAccount = (acc: AccountWithBalance) => {
     setEditingAccountId(acc.id)
     setAccountForm({ name: acc.name, type: acc.type, institution: acc.institution, currency: acc.currency })
     setShowAccountDialog(true)
@@ -476,7 +472,12 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`text-sm font-medium tabular-nums ${acc.balance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {acc.balance < 0 ? '-' : ''}${Math.abs(acc.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {new Intl.NumberFormat(undefined, {
+                        style: 'currency',
+                        currency: acc.currency,
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      }).format(acc.balance)}
                     </span>
                     <Badge variant="secondary" className="capitalize">{acc.type}</Badge>
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => editAccount(acc)} aria-label={`Edit ${acc.name}`}>

@@ -12,6 +12,11 @@ const settingsSource = readFileSync(
   'utf-8'
 )
 
+const typesSource = readFileSync(
+  join(__dirname, '../types.ts'),
+  'utf-8'
+)
+
 describe('Account balance summary in GET response', () => {
   it('GET query joins transactions to compute balance', () => {
     expect(accountsRouteSource).toContain('COALESCE(SUM(t.amount), 0) as balance')
@@ -30,15 +35,31 @@ describe('Account balance summary in GET response', () => {
   })
 })
 
-describe('Settings page displays account balance', () => {
-  it('Account interface includes balance and transaction_count', () => {
-    expect(settingsSource).toMatch(/balance:\s*number/)
-    expect(settingsSource).toMatch(/transaction_count:\s*number/)
+describe('Shared AccountWithBalance type', () => {
+  it('exports AccountWithBalance extending Account', () => {
+    expect(typesSource).toContain('export interface AccountWithBalance extends Account')
   })
 
-  it('displays balance with currency formatting', () => {
-    expect(settingsSource).toContain('acc.balance')
-    expect(settingsSource).toContain('minimumFractionDigits: 2')
+  it('includes balance and transaction_count fields', () => {
+    expect(typesSource).toContain('balance: number')
+    expect(typesSource).toContain('transaction_count: number')
+  })
+})
+
+describe('Settings page displays account balance', () => {
+  it('imports AccountWithBalance from shared types', () => {
+    expect(settingsSource).toContain('AccountWithBalance')
+    expect(settingsSource).toContain('@/lib/types')
+  })
+
+  it('does not define a local Account interface', () => {
+    expect(settingsSource).not.toMatch(/^interface Account\b/m)
+  })
+
+  it('uses Intl.NumberFormat with acc.currency for balance display', () => {
+    expect(settingsSource).toContain('Intl.NumberFormat')
+    expect(settingsSource).toContain('acc.currency')
+    expect(settingsSource).toContain("style: 'currency'")
   })
 
   it('uses color coding for positive vs negative balances', () => {
