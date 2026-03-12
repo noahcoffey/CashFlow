@@ -122,6 +122,82 @@ export const deleteBillSchema = z.object({
   id: uuid,
 })
 
+// Tag schemas
+export const createTagSchema = z.object({
+  name: z.string().min(1, 'Tag name is required').max(100),
+  color: z.string().max(20).default('#6B7280'),
+})
+
+export const updateTagSchema = z.object({
+  id: uuid,
+  name: z.string().min(1).max(100).optional(),
+  color: z.string().max(20).optional(),
+})
+
+export const deleteTagSchema = z.object({
+  id: uuid,
+})
+
+// Rule schemas
+const ruleConditionSchema = z.object({
+  field: z.enum(['description', 'amount', 'account'], {
+    message: 'Condition field must be description, amount, or account',
+  }),
+  operator: z.enum(['contains', 'starts_with', 'ends_with', 'equals', 'regex', 'gt', 'lt', 'gte', 'lte', 'between'], {
+    message: 'Invalid condition operator',
+  }),
+  value: z.string().min(1, 'Condition value is required'),
+  value2: z.string().optional(),
+  case_sensitive: z.boolean().optional(),
+})
+
+const ruleActionSchema = z.object({
+  type: z.enum(['set_category', 'set_display_name', 'add_tag'], {
+    message: 'Action type must be set_category, set_display_name, or add_tag',
+  }),
+  value: z.string().min(1, 'Action value is required'),
+})
+
+export const createRuleSchema = z.object({
+  name: z.string().min(1, 'Rule name is required').max(200),
+  priority: z.number().int().nonnegative().default(0),
+  conditions: z.array(ruleConditionSchema).min(1, 'At least one condition is required'),
+  actions: z.array(ruleActionSchema).min(1, 'At least one action is required'),
+  apply_retroactively: z.boolean().optional(),
+})
+
+export const updateRuleSchema = z.object({
+  id: uuid,
+  name: z.string().min(1).max(200).optional(),
+  priority: z.number().int().nonnegative().optional(),
+  conditions: z.array(ruleConditionSchema).min(1).optional(),
+  actions: z.array(ruleActionSchema).min(1).optional(),
+  is_active: z.union([z.literal(0), z.literal(1)]).optional(),
+})
+
+export const deleteRuleSchema = z.object({
+  id: uuid,
+})
+
+// Alias schemas
+export const createAliasSchema = z.object({
+  raw_pattern: z.string().min(1, 'Match pattern is required').max(500),
+  display_name: z.string().min(1, 'Display name is required').max(500),
+  category_id: z.string().nullable().optional(),
+  apply_retroactively: z.boolean().optional(),
+})
+
+export const updateAliasSchema = z.object({
+  id: uuid,
+  raw_pattern: z.string().min(1).max(500).optional(),
+  display_name: z.string().min(1).max(500).optional(),
+  category_id: z.string().nullable().optional(),
+})
+
+export const deleteAliasSchema = z.object({
+  id: uuid,
+})
+
 /**
  * Validate request body against a Zod schema.
  * Returns { data } on success or { error, status } on failure.
