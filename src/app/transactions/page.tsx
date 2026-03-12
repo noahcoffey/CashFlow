@@ -159,9 +159,18 @@ export default function TransactionsPage() {
   }, [fetchTransactions])
 
   useEffect(() => {
-    fetch("/api/categories").then((r) => r.json()).then((d) => setCategories(d.categories || []))
-    fetch("/api/accounts").then((r) => r.json()).then((d) => setAccounts(d.accounts || []))
-    fetch("/api/tags").then((r) => r.json()).then((d) => setTags(d.tags || []))
+    fetch("/api/categories")
+      .then((r) => { if (!r.ok) throw new Error("Failed to load categories"); return r.json() })
+      .then((d) => setCategories(d.categories || []))
+      .catch(() => toast.error("Failed to load categories"))
+    fetch("/api/accounts")
+      .then((r) => { if (!r.ok) throw new Error("Failed to load accounts"); return r.json() })
+      .then((d) => setAccounts(d.accounts || []))
+      .catch(() => toast.error("Failed to load accounts"))
+    fetch("/api/tags")
+      .then((r) => { if (!r.ok) throw new Error("Failed to load tags"); return r.json() })
+      .then((d) => setTags(d.tags || []))
+      .catch(() => toast.error("Failed to load tags"))
   }, [])
 
   const totalPages = Math.ceil(total / limit)
