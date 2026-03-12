@@ -82,6 +82,7 @@ export default function SettingsPage() {
   const [dbHealthy, setDbHealthy] = useState<boolean | null>(null)
   const [checkingHealth, setCheckingHealth] = useState(false)
   const [restoring, setRestoring] = useState(false)
+  const [accountErrors, setAccountErrors] = useState<{ name?: string }>({})
 
   const fetchData = () => {
     fetch("/api/accounts").then(r => r.json()).then(d => setAccounts(d.accounts || []))
@@ -94,7 +95,11 @@ export default function SettingsPage() {
   useEffect(() => { fetchData() }, [])
 
   const saveAccount = async () => {
-    if (!accountForm.name) return
+    const errors: { name?: string } = {}
+    if (!accountForm.name.trim()) errors.name = "Account name is required"
+    else if (accountForm.name.trim().length > 200) errors.name = "Name must be 200 characters or less"
+    setAccountErrors(errors)
+    if (Object.keys(errors).length > 0) return
     const method = editingAccountId ? "PUT" : "POST"
     const body = editingAccountId ? { id: editingAccountId, ...accountForm } : accountForm
     await fetch("/api/accounts", {
@@ -727,7 +732,8 @@ export default function SettingsPage() {
           <div className="space-y-4">
             <div>
               <label className="text-sm text-zinc-400 mb-1 block">Account Name *</label>
-              <Input value={accountForm.name} onChange={e => setAccountForm({ ...accountForm, name: e.target.value })} placeholder="e.g. Chase Checking" />
+              <Input value={accountForm.name} onChange={e => { setAccountForm({ ...accountForm, name: e.target.value }); setAccountErrors({}) }} placeholder="e.g. Chase Checking" />
+              {accountErrors.name && <p className="text-xs text-red-400 mt-1">{accountErrors.name}</p>}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>

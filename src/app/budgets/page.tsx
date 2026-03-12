@@ -49,6 +49,7 @@ export default function BudgetsPage() {
   const [loading, setLoading] = useState(true)
   const [showDialog, setShowDialog] = useState(false)
   const [editForm, setEditForm] = useState({ category_id: "", amount: "", period: "monthly" })
+  const [formErrors, setFormErrors] = useState<{ category_id?: string; amount?: string }>({})
   const [showCatDialog, setShowCatDialog] = useState(false)
   const [catForm, setCatForm] = useState({ id: "", name: "", icon: "📁", color: "#6B7280", type: "expense", parent_id: "", budget_amount: "0" })
   const [spendingHistory, setSpendingHistory] = useState<SpendingHistory[]>([])
@@ -76,7 +77,13 @@ export default function BudgetsPage() {
   useEffect(() => { fetchData(); fetchHistory() }, [])
 
   const saveBudget = async () => {
-    if (!editForm.category_id || !editForm.amount) return
+    const errors: { category_id?: string; amount?: string } = {}
+    if (!editForm.category_id) errors.category_id = "Category is required"
+    const parsed = parseFloat(editForm.amount)
+    if (!editForm.amount || isNaN(parsed)) errors.amount = "Amount must be a valid number"
+    else if (parsed <= 0) errors.amount = "Amount must be greater than zero"
+    setFormErrors(errors)
+    if (Object.keys(errors).length > 0) return
     await fetch("/api/budgets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -372,16 +379,18 @@ export default function BudgetsPage() {
           <div className="space-y-4">
             <div>
               <label className="text-sm text-zinc-400 mb-1 block">Category</label>
-              <Select value={editForm.category_id} onChange={(e) => setEditForm({ ...editForm, category_id: e.target.value })}>
+              <Select value={editForm.category_id} onChange={(e) => { setEditForm({ ...editForm, category_id: e.target.value }); setFormErrors(prev => ({ ...prev, category_id: undefined })) }}>
                 <option value="">Select category</option>
                 {categories.filter(c => c.type === 'expense').map((c) => (
                   <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
                 ))}
               </Select>
+              {formErrors.category_id && <p className="text-xs text-red-400 mt-1">{formErrors.category_id}</p>}
             </div>
             <div>
               <label className="text-sm text-zinc-400 mb-1 block">Amount</label>
-              <Input type="number" value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} placeholder="500" />
+              <Input type="number" value={editForm.amount} onChange={(e) => { setEditForm({ ...editForm, amount: e.target.value }); setFormErrors(prev => ({ ...prev, amount: undefined })) }} placeholder="500" />
+              {formErrors.amount && <p className="text-xs text-red-400 mt-1">{formErrors.amount}</p>}
             </div>
             <div>
               <label className="text-sm text-zinc-400 mb-1 block">Period</label>
