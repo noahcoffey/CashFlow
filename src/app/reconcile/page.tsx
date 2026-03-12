@@ -30,6 +30,7 @@ export default function ReconcilePage() {
   const [activeSession, setActiveSession] = useState<Session | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [cleared, setCleared] = useState<Set<string>>(new Set())
+  const [balanceError, setBalanceError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch("/api/accounts").then(r => r.json()).then(d => setAccounts(d.accounts || []))
@@ -38,10 +39,16 @@ export default function ReconcilePage() {
 
   const startSession = async () => {
     if (!accountId || !statementDate || !statementBalance) return
+    const parsed = parseFloat(statementBalance)
+    if (isNaN(parsed)) {
+      setBalanceError("Statement balance must be a valid number")
+      return
+    }
+    setBalanceError(null)
     const res = await fetch("/api/reconciliation", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ account_id: accountId, statement_date: statementDate, statement_balance: parseFloat(statementBalance) }),
+      body: JSON.stringify({ account_id: accountId, statement_date: statementDate, statement_balance: parsed }),
     })
     const data = await res.json()
     setActiveSession(data.session)
@@ -119,7 +126,8 @@ export default function ReconcilePage() {
                 </div>
                 <div>
                   <label className="text-sm text-zinc-400 mb-1 block">Statement Balance</label>
-                  <Input type="number" step="0.01" value={statementBalance} onChange={e => setStatementBalance(e.target.value)} placeholder="1234.56" />
+                  <Input type="number" step="0.01" value={statementBalance} onChange={e => { setStatementBalance(e.target.value); setBalanceError(null) }} placeholder="1234.56" />
+                  {balanceError && <p className="text-xs text-red-400 mt-1">{balanceError}</p>}
                 </div>
               </div>
               <Button onClick={startSession} disabled={!accountId || !statementDate || !statementBalance}>
