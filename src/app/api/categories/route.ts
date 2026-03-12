@@ -6,7 +6,8 @@ export async function GET() {
   try {
     const db = getDb()
     const categories = db.prepare(
-      `SELECT c.*, p.name as parent_name
+      `SELECT c.*, p.name as parent_name,
+              (SELECT COUNT(*) FROM transactions t WHERE t.category_id = c.id) as transaction_count
        FROM categories c
        LEFT JOIN categories p ON c.parent_id = p.id
        ORDER BY c.type, c.name`
@@ -107,7 +108,30 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: validation.error }, { status: 400 })
     }
 
-    const result = db.prepare('DELETE FROM categories WHERE id = ?').run(validation.data.id)
+    const { id } = validation.data
+    const existing = db.prepare('SELECT id FROM categories WHERE id = ?').get(id)
+    if (!existing) {
+      return NextResponse.json({ error: 'Category not found' }, { status: 404 })
+    }
+
+    // If confirm=false, return the transaction count without deleting
+    if (body.confirm === false) {
+      const count = db.prepare(
+        'SELECT COUNT(*) as count FROM transactions WHERE category_id = ?'
+      ).get(id) as { count: number }
+      return NextResponse.json({ transactionCount: count.count })
+    }
+
+    // Optionally reassign transactions to another category before deleting
+    if (body.reassignTo) {
+      const target = db.prepare('SELECT id FROM categories WHERE id = ?').get(body.reassignTo)
+      if (!target) {
+        return NextResponse.json({ error: 'Reassign target category not found' }, { status: 404 })
+      }
+      db.prepare('UPDATE transactions SET category_id = ? WHERE category_id = ?').run(body.reassignTo, id)
+    }
+
+    const result = db.prepare('DELETE FROM categories WHERE id = ?').run(id)
     if (result.changes === 0) {
       return NextResponse.json({ error: 'Category not found' }, { status: 404 })
     }

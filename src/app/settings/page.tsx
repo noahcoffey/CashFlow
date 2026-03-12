@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { formatDate } from "@/lib/utils"
-import { Plus, Trash2, Edit2, Building2, Tag, RefreshCw, Tags, Zap, Play, Pause, Sparkles, Check, X, Loader2, Download, Upload, HardDrive, ShieldCheck } from "lucide-react"
+import { Plus, Trash2, Edit2, Building2, Tag, RefreshCw, Tags, Zap, Play, Pause, Sparkles, Check, X, Loader2, Download, Upload, HardDrive, ShieldCheck, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
 import type { AccountWithBalance } from "@/lib/types"
 
@@ -19,7 +19,7 @@ interface Alias {
 }
 
 interface Category {
-  id: string; name: string; icon: string;
+  id: string; name: string; icon: string; type: string; color: string; transaction_count: number;
 }
 
 interface TagItem {
@@ -80,6 +80,8 @@ export default function SettingsPage() {
   const [checkingHealth, setCheckingHealth] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [accountErrors, setAccountErrors] = useState<{ name?: string }>({})
+  const [deletingCategory, setDeletingCategory] = useState<Category | null>(null)
+  const [categoryReassignTo, setCategoryReassignTo] = useState("")
 
   const fetchData = () => {
     fetch("/api/accounts").then(r => r.json()).then(d => setAccounts(d.accounts || []))
@@ -439,6 +441,30 @@ export default function SettingsPage() {
     toast.success("Tag deleted")
   }
 
+  const startDeleteCategory = (cat: Category) => {
+    setDeletingCategory(cat)
+    setCategoryReassignTo("")
+  }
+
+  const confirmDeleteCategory = async () => {
+    if (!deletingCategory) return
+    const body: Record<string, unknown> = { id: deletingCategory.id }
+    if (categoryReassignTo) body.reassignTo = categoryReassignTo
+    const res = await fetch("/api/categories", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+    const data = await res.json()
+    setDeletingCategory(null)
+    if (!res.ok) {
+      toast.error(data.error || "Failed to delete category")
+      return
+    }
+    fetchData()
+    toast.success("Category deleted")
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -588,6 +614,47 @@ export default function SettingsPage() {
                     aria-label={`Delete ${tag.name}`}
                   >
                     <Trash2 className="h-2.5 w-2.5" aria-hidden="true" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Categories */}
+      <Card>
+        <CardHeader>
+          <div>
+            <CardTitle className="flex items-center gap-2"><Tag className="h-5 w-5" /> Categories</CardTitle>
+            <CardDescription>Manage transaction categories</CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {categories.length === 0 ? (
+            <div className="py-8 text-center text-zinc-500">
+              <p>No categories yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {categories.map(cat => (
+                <div key={cat.id} className="flex items-center justify-between py-3 px-4 rounded-lg bg-zinc-800/30 hover:bg-zinc-800/50">
+                  <div className="flex items-center gap-2">
+                    <span>{cat.icon}</span>
+                    <span className="font-medium text-zinc-200">{cat.name}</span>
+                    <Badge variant="secondary" className="text-xs capitalize">{cat.type}</Badge>
+                    {cat.transaction_count > 0 && (
+                      <span className="text-xs text-zinc-500">{cat.transaction_count} txn{cat.transaction_count !== 1 ? 's' : ''}</span>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-red-400"
+                    onClick={() => startDeleteCategory(cat)}
+                    aria-label={`Delete ${cat.name}`}
+                  >
+                    <Trash2 className="h-3 w-3" aria-hidden="true" />
                   </Button>
                 </div>
               ))}
@@ -784,6 +851,46 @@ export default function SettingsPage() {
           <div className="flex gap-2 justify-end mt-4">
             <Button variant="outline" onClick={() => setDeletingAccount(null)}>Cancel</Button>
             <Button variant="destructive" onClick={confirmDeleteAccount}>Delete Account</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Category Confirm */}
+      <Dialog open={!!deletingCategory} onOpenChange={(open) => { if (!open) { setDeletingCategory(null); setCategoryReassignTo("") } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Category</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-zinc-300">
+              Are you sure you want to delete <span className="font-semibold text-zinc-100">{deletingCategory?.icon} {deletingCategory?.name}</span>?
+            </p>
+            {deletingCategory && deletingCategory.transaction_count > 0 && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-400/10 border border-amber-400/20">
+                <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+                <div className="text-sm">
+                  <p className="text-amber-300 font-medium">
+                    {deletingCategory.transaction_count} transaction{deletingCategory.transaction_count !== 1 ? 's' : ''} will become uncategorized
+                  </p>
+                  <p className="text-zinc-400 text-xs mt-1">You can reassign them to another category before deleting.</p>
+                </div>
+              </div>
+            )}
+            {deletingCategory && deletingCategory.transaction_count > 0 && categories.filter(c => c.id !== deletingCategory.id).length > 0 && (
+              <div>
+                <label className="text-sm text-zinc-400 mb-1 block">Reassign transactions to</label>
+                <Select value={categoryReassignTo} onChange={e => setCategoryReassignTo(e.target.value)}>
+                  <option value="">Leave uncategorized</option>
+                  {categories.filter(c => c.id !== deletingCategory.id).map(c => (
+                    <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                  ))}
+                </Select>
+              </div>
+            )}
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => { setDeletingCategory(null); setCategoryReassignTo("") }}>Cancel</Button>
+              <Button variant="destructive" onClick={confirmDeleteCategory}>Delete Category</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
